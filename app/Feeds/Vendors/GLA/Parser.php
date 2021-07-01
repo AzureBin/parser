@@ -18,27 +18,24 @@ class Parser extends HtmlParser
     private ?int $avail = null;
     private string $mpn = '';
     private string $product = '';
+    private ?string $upc = null;
 
     public function beforeParse(): void
     {
-        $this->mpn = $this->getAttr('article.product-detail', 'id');
-        $this->avail = $this->getText( '.item button.add-to-cart' ) == 'Add to Cart' ? 1 : 0; 
+        $this->avail = 0;
         $this->filter( 'div.description ul li' )->each( function ( ParserCrawler $c ) {
-            if ( stripos( $c->text(), 'Add to Cart' ) !== false ) {
-                $this->avail = StringHelper::getFloat( $c->text() );
-            }
-            elseif ( stripos( $c->text(), 'Sold Out' ) !== false ) {
-                $this->avail = 0;
+            if ( str_contains( $c->text(), 'UPC' ) ) {
+                $this->upc = str_replace("UPC", "", $c->text());
             }
             else {
                 $this->shorts[] = StringHelper::normalizeSpaceInString( $c->text() );
             }
-        } );
+        });
     }
 
     public function getMpn(): string
     {
-        return $this->mpn;
+        return $this->getAttr('article.product-detail', 'id');
     }
 
     public function getProduct(): string
@@ -53,7 +50,7 @@ class Parser extends HtmlParser
 
     public function getImages(): array
     {
-        return [ 'https:' .$this->getAttr( 'div.image-container.primary-image-container img', 'src' ) ];
+        return array_merge(['https:' . $this->getAttr('.primary-images a', 'href')], $this->getSrcImages('.secondary-image'));
     }
 
     public function getDimX(): ?float
@@ -89,5 +86,10 @@ class Parser extends HtmlParser
     public function getAvail(): ?int
     {
         return $this->avail;
+    }
+
+    public function getUpc(): ?string
+    {
+        return $this->upc;
     }
 }

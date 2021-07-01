@@ -14,6 +14,6 @@ class Vendor extends HttpProcessor
 
     public function isValidFeedItem( FeedItem $fi ): bool
     {
-        return !empty( $fi->getMpn() );
+        return !empty( $fi->getMpn() ) && ( $fi->getCostToUs() > 0 );
     }
 }
