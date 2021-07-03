@@ -2,11 +2,13 @@
 
 namespace App\Feeds\Vendors\HCI;
 
+use App\Feeds\Feed\FeedItem;
 use App\Feeds\Parser\HtmlParser;
 use App\Feeds\Utils\ParserCrawler;
 use App\Helpers\StringHelper;
 
-class Parser extends HtmlParser {
+class Parser extends HtmlParser
+{
 
     public function getMpn(): string
     {
@@ -43,7 +45,7 @@ class Parser extends HtmlParser {
 
     public function getCostToUs(): float
     {
-        if($this->exists('span[itemprop="lowPrice"]')){
+        if ($this->exists('span[itemprop="lowPrice"]')) {
             return StringHelper::getMoney(trim($this->getAttr('span[itemprop="lowPrice"]', 'data-rate')));
         }
         return StringHelper::getMoney(trim($this->getAttr('span[itemprop="price"]', 'data-rate')));
@@ -59,27 +61,22 @@ class Parser extends HtmlParser {
         return array(trim($this->getAttr('meta[property="og:image"]', 'content')));
     }
 
-    public function getOptions(): array
+    public function isGroup(): bool
     {
-        $options = [];
-        $option_lists = $this->filter( '.custcol1-controls product-views-option-tile-container > label' );
+        return $this->exists('.product-views-option-tile-picker');
+    }
 
-        if ( !$option_lists->count() ) {
-            return $options;
-        }
+    public function getChildProducts(FeedItem $parent_fi): array
+    {
+        $child = [];
 
-        $option_lists->each( function ( ParserCrawler $list ) use ( &$options ) {
-            $label = $list->filter( 'label-custcol1' );
-            if ( $label->count() === 0 ) {
-                return;
-            }
-            $name = trim( $label->text(), ' : ' );
-            $options[ $name ] = [];
-            $list->filter( 'input' )->each( function ( ParserCrawler $option ) use ( &$options, $name ) {
-                $options[ $name ][] = trim( $option->text(), '  ' );
-            } );
-        } );
+        $this->filter('.product-views-option-tile-picker')
+            ->each(function (ParserCrawler $c) use ($parent_fi, &$child) {
+                $fi = clone $parent_fi;
+                $fi->setProduct($c->getText('label'));
+                $child[] = $fi;
+            });
 
-        return $options;
+        return $child;
     }
 }
