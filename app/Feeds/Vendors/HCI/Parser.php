@@ -61,6 +61,19 @@ class Parser extends HtmlParser
         return array(trim($this->getAttr('meta[property="og:image"]', 'content')));
     }
 
+    public function getOptions(): array
+    {
+        $child = [];
+
+        $child_lists = $this->filter('div.product-views-option-tile-container label');
+        $child_lists->each(function (ParserCrawler $c) use (&$child) {
+            $child[] = $c->getText('label');
+        });
+
+        return $child;
+    }
+
+
     public function isGroup(): bool
     {
         return $this->exists('.product-views-option-tile-picker');
@@ -70,13 +83,17 @@ class Parser extends HtmlParser
     {
         $child = [];
 
-        $this->filter('.product-views-option-tile-picker')
-            ->each(function (ParserCrawler $c) use ($parent_fi, &$child) {
-                $fi = clone $parent_fi;
-                $fi->setProduct($c->getText('label'));
-                $child[] = $fi;
-            });
+        $child_lists = $this->filter('div.product-views-option-tile-container label');
 
-        return $child;
+        $child_lists->each(function (ParserCrawler $c) use ($parent_fi, &$child,&$child_lists) {
+            $fi = clone $parent_fi;
+            $fi->setMpn($this->getText('span[itemprop="sku"]'));
+            $fi->setProduct($c->getText('label'));
+            $fi->setListPrice(StringHelper::getMoney(trim($this->getAttr('span[itemprop="price"]', 'data-rate'))));
+            $child[] = $fi;
+        });
+
+        return array_values($child);
     }
+
 }
