@@ -82,18 +82,39 @@ class Parser extends HtmlParser
     public function getChildProducts(FeedItem $parent_fi): array
     {
         $child = [];
+        $current_url = $this->getAttr('meta[property="og:url"]', 'content');
+        $url = "https://www.homecontrols.com/api/items";
+        $params = [
+            'country' => 'US',
+            'currency' => 'USD',
+            'fieldset' => 'details',
+            'language' => 'en',
+            'url' => explode('/', $current_url)[3]
+        ];
 
-        $child_lists = $this->filter('div.product-views-option-tile-container label');
+        $data = $this->getVendor()->getDownloader()->get($url, $params)->getJSON();
 
-        $child_lists->each(function (ParserCrawler $c) use ($parent_fi, &$child,&$child_lists) {
+        $children_data = $data['items'][0]['matrixchilditems_detail'];
+
+        foreach ($children_data as $index => $c) {
             $fi = clone $parent_fi;
-            $fi->setMpn($this->getText('span[itemprop="sku"]'));
-            $fi->setProduct($c->getText('label'));
-            $fi->setListPrice(StringHelper::getMoney(trim($this->getAttr('span[itemprop="price"]', 'data-rate'))));
+
+            $fi->setMpn($c['itemid']);
+            $fi->setListPrice(floatval($c['onlinecustomerprice']));
+            $fi->setCostToUs(floatval($c['onlinecustomerprice']));
+            $fi->setShortdescr([$c['custitem604']]);
+            $fi->setFulldescr($c['stockdescription']);
+            $fi->setASIN($c['quantityavailable']?$c['quantityavailable']:self::DEFAULT_AVAIL_NUMBER);
+
+            if (array_key_exists('custitem33',$c)){
+                $fi->setProduct($c['custitem33']);
+            } elseif (array_key_exists('custitem127',$c)) {
+                $fi->setProduct($c['custitem127']);
+            }
+
             $child[] = $fi;
-        });
+        }
 
-        return array_values($child);
+        return $child;
     }
-
 }
