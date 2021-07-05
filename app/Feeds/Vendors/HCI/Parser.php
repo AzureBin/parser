@@ -84,12 +84,18 @@ class Parser extends HtmlParser
         $child = [];
         $current_url = $this->getAttr('meta[property="og:url"]', 'content');
         $url = "https://www.homecontrols.com/api/items";
+        $data_url = explode('/', $current_url);
+        if(array_key_exists(4,$data_url)){
+            $temp_url = $data_url[3].'/'.$data_url[4];
+        }else{
+            $temp_url = $data_url[3];
+        }
         $params = [
             'country' => 'US',
             'currency' => 'USD',
             'fieldset' => 'details',
             'language' => 'en',
-            'url' => explode('/', $current_url)[3]
+            'url' => $temp_url
         ];
 
         $data = $this->getVendor()->getDownloader()->get($url, $params)->getJSON();
@@ -97,6 +103,7 @@ class Parser extends HtmlParser
         $children_data = $data['items'][0]['matrixchilditems_detail'];
 
         foreach ($children_data as $index => $c) {
+
             $fi = clone $parent_fi;
 
             $fi->setMpn($c['itemid']);
