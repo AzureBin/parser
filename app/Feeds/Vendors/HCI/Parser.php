@@ -111,7 +111,7 @@ class Parser extends HtmlParser
             $fi->setCostToUs(floatval($c['onlinecustomerprice']));
             $fi->setShortdescr([$c['custitem604']]);
             $fi->setFulldescr($c['stockdescription']);
-            $fi->setASIN($c['quantityavailable']?$c['quantityavailable']:self::DEFAULT_AVAIL_NUMBER);
+            $fi->setASIN(array_key_exists('quantityavailable',$c)?$c['quantityavailable']:self::DEFAULT_AVAIL_NUMBER);
 
             if (array_key_exists('custitem33',$c)){
                 $fi->setProduct($c['custitem33']);
