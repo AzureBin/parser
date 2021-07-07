@@ -12,7 +12,7 @@ class Parser extends HtmlParser
 
     public function getMpn(): string
     {
-        return $this->getText('.product-line-sku-value');
+        return $this->exists('span[itemprop="sku"]') && $this->getText('span[itemprop="sku"]') != null ? $this->getText('span[itemprop="sku"]') : 'NOSKU';
     }
 
     public function getProduct(): string
@@ -23,14 +23,52 @@ class Parser extends HtmlParser
     public function getListPrice(): ?float
     {
         if ($this->exists('span[itemprop="highPrice"]')) {
-            return StringHelper::getMoney(trim($this->getAttr('span[itemprop="highPrice"]', 'data-rate')));
+            return $this->getAttr('span[itemprop="highPrice"]', 'data-rate') != 0 ? floatval($this->getAttr('span[itemprop="highPrice"]', 'data-rate')) : 0.1;
         }
-        return StringHelper::getMoney(trim($this->getAttr('span[itemprop="price"]', 'data-rate')));
+        return $this->getAttr('span[itemprop="price"]', 'data-rate') !== 0 ? floatval($this->getAttr('span[itemprop="price"]', 'data-rate')) : 0.1;
+    }
+
+    public function getCostToUs(): float
+    {
+        if ($this->exists('span[itemprop="lowPrice"]')) {
+            return $this->getAttr('span[itemprop="lowPrice"]', 'data-rate') != 0.0 ? $this->getAttr('span[itemprop="lowPrice"]', 'data-rate') : 0.1;
+        }elseif ($this->exists('span[itemprop="price"]')){
+            return $this->getAttr('span[itemprop="price"]', 'data-rate') != 0.0 ? $this->getAttr('span[itemprop="price"]', 'data-rate'): 0.1;
+        }else{
+            return 0.1;
+        }
+    }
+
+    public function getAttributes(): ?array
+    {
+        // amendment for comment right parsing  2
+        $attribs = [];
+
+        $this->filter('#product-details-information-tab-1 li')
+            ->each(function (ParserCrawler $c) use (&$attribs) {
+                if(str_contains($c->getText('li'),':') && $c->getText('li') != ''){
+                    $temp = explode(':', $c->getText('li'));
+                    if ($temp[1] != '')
+                        $attribs[(string)$temp[0]] = (string)$temp[1];
+                }
+            });
+
+        return count($attribs) > 0 ? $attribs : ['null'];
     }
 
     public function getShortDescription(): array
     {
-        return array($this->getAttr('meta[name="description"]', 'content'));
+        // amendment for comment right parsing 1
+        $shor_desc = [];
+
+        $this->filter('#product-details-information-tab-1 li')
+            ->each(function (ParserCrawler $c) use (&$shor_desc) {
+                if(!str_contains($c->getText('li'),':') && $c->getText('li') != ''){
+                    $shor_desc[] = $c->getText('li');
+                }
+            });
+
+        return count($shor_desc) > 0 ? $shor_desc : ['null'];
     }
 
     public function getDescription(): string
@@ -43,36 +81,20 @@ class Parser extends HtmlParser
         return trim($this->getAttr('meta[property="og:provider_name"]', 'content'));
     }
 
-    public function getCostToUs(): float
-    {
-        if ($this->exists('span[itemprop="lowPrice"]')) {
-            return StringHelper::getMoney(trim($this->getAttr('span[itemprop="lowPrice"]', 'data-rate')));
-        }
-        return StringHelper::getMoney(trim($this->getAttr('span[itemprop="price"]', 'data-rate')));
-    }
 
     public function getAvail(): ?int
     {
-        return self::DEFAULT_AVAIL_NUMBER;
+        // amendment 3
+        $check_stock = $this->getAttr('meta[property="og:availability"]', 'content');
+        return $check_stock === "InStock" || $check_stock === "PreOrder" ? self::DEFAULT_AVAIL_NUMBER : 0;
     }
 
     public function getImages(): array
     {
-        return array(trim($this->getAttr('meta[property="og:image"]', 'content')));
+        // amendment 4
+        $img[] = trim($this->getAttr('meta[property="og:image"]', 'content'));
+        return count($img)>0 ? $img : [null] ;
     }
-
-    public function getOptions(): array
-    {
-        $child = [];
-
-        $child_lists = $this->filter('div.product-views-option-tile-container label');
-        $child_lists->each(function (ParserCrawler $c) use (&$child) {
-            $child[] = $c->getText('label');
-        });
-
-        return $child;
-    }
-
 
     public function isGroup(): bool
     {
@@ -85,9 +107,9 @@ class Parser extends HtmlParser
         $current_url = $this->getAttr('meta[property="og:url"]', 'content');
         $url = "https://www.homecontrols.com/api/items";
         $data_url = explode('/', $current_url);
-        if(array_key_exists(4,$data_url)){
-            $temp_url = $data_url[3].'/'.$data_url[4];
-        }else{
+        if (array_key_exists(4, $data_url)) {
+            $temp_url = $data_url[3] . '/' . $data_url[4];
+        } else {
             $temp_url = $data_url[3];
         }
         $params = [
@@ -106,17 +128,17 @@ class Parser extends HtmlParser
 
             $fi = clone $parent_fi;
 
-            $fi->setMpn($c['itemid']);
+            $fi->setMpn('' . $c['itemid']);
             $fi->setListPrice(floatval($c['onlinecustomerprice']));
             $fi->setCostToUs(floatval($c['onlinecustomerprice']));
-            $fi->setShortdescr([$c['custitem604']]);
-            $fi->setFulldescr($c['stockdescription']);
-            $fi->setASIN(array_key_exists('quantityavailable',$c)?$c['quantityavailable']:self::DEFAULT_AVAIL_NUMBER);
-
-            if (array_key_exists('custitem33',$c)){
-                $fi->setProduct($c['custitem33']);
-            } elseif (array_key_exists('custitem127',$c)) {
-                $fi->setProduct($c['custitem127']);
+            $fi->setRAvail(intval($c['quantityavailable']));
+            // amendment 4
+            $fi->setASIN(array_key_exists('quantityavailable', $c) ? $c['quantityavailable'] : self::DEFAULT_AVAIL_NUMBER);
+            // amendment 5
+            if (array_key_exists('custitem33', $c)) {
+                $fi->setProduct($this->getText('.product-views-option-tile-label') . $c['custitem33']);
+            } elseif (array_key_exists('custitem127', $c)) {
+                $fi->setProduct($this->getText('.product-views-option-tile-label') . $c['custitem127']);
             }
 
             $child[] = $fi;
