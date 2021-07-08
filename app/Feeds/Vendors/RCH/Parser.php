@@ -19,6 +19,7 @@ class Parser extends HtmlParser
     private string $mpn = '';
     private string $product = '';
     private ?string $upc = null;
+    private array $desc = [];
 
     public function beforeParse(): void
     {
@@ -43,6 +44,32 @@ class Parser extends HtmlParser
                     $this->dims[ 'y' ] = (float) preg_replace("/[^0-9.]/", "", $m[1]);
                 }
             }
+        });
+
+        $this->desc = $this->filter( '#tab-description p' )->each( function ( ParserCrawler $c ) {
+            return $c->filter( 'strong' )->each( function ( ParserCrawler $d ) {
+                if ( str_contains( $d->text(), 'FEATURES:' ) ) {
+                    $features = $d->parents()->nextAll();
+                    $features->filter( 'ul li' )->each( function ( ParserCrawler $e ) {
+                        array_push($this->shorts, $e->text());
+                    });
+                    foreach ($features as $node) {
+                        $node->parentNode->removeChild($node);
+                    }
+                }
+                if ( str_contains( $d->text(), 'TECHNICAL SPECS:' ) ) {
+                    $technicalSpecs = $d->parents()->nextAll();
+                    $technicalSpecs->filter( 'ul li' )->each( function ( ParserCrawler $e ) {
+                        if ( str_contains( $e->text(), ':' ) ) {
+                            [ $key, $val ] = explode( ':', $e->text() );
+                            $this->attrs[$key] = $val;
+                        }
+                    });
+                    foreach ($technicalSpecs as $node) {
+                        $node->parentNode->removeChild($node);
+                    }
+                }
+            });
         });
 
         $this->filter( 'meta' )->each( function ( ParserCrawler $c ) {
@@ -85,11 +112,13 @@ class Parser extends HtmlParser
 
     public function getDescription(): string
     {
+        // return trim($this->desc);
         return trim($this->getText('#tab-description'));
     }
 
     public function getShortDescription(): array
     {
+        return $this->shorts;
         if ( $this->exists( '#tab-description p' ) ) {
             return $this->getContent( '#tab-description p' );
         }
