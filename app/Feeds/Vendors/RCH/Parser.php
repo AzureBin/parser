@@ -103,7 +103,7 @@ class Parser extends HtmlParser
 
     public function getListPrice(): ?float
     {
-        return $this->list_price;
+        return StringHelper::getMoney( $this->getMoney( 'span.price.price--non-sale' ) );
     }
 
     public function getShippingWeight(): ?float
