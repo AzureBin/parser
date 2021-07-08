@@ -18,12 +18,16 @@ class Vendor extends HttpProcessor
     public const PRODUCT_LINK_CSS_SELECTORS = [ 'li.product article.card figure.card-figure a:first-child' ];
 
     protected array $first = [
-        'https://rchobbyexplosion.com/rc-parts/',
-        'https://rchobbyexplosion.com/clearance-specials/',
-        'https://rchobbyexplosion.com/rc-batteries/',
-        'https://rchobbyexplosion.com/rc-battery-chargers/',
-        'https://rchobbyexplosion.com/rc-radio-systems/',
-        'https://rchobbyexplosion.com/fun-toy-grade-rc/'
+        'https://rchobbyexplosion.com/'
+
+        // 'https://rchobbyexplosion.com/rc-parts/',
+        // 'https://rchobbyexplosion.com/clearance-specials/',
+        // 'https://rchobbyexplosion.com/rc-batteries/',
+        // 'https://rchobbyexplosion.com/rc-battery-chargers/',
+        // 'https://rchobbyexplosion.com/rc-radio-systems/',
+        // 'https://rchobbyexplosion.com/fun-toy-grade-rc/'
+
+
         // 'https://rchobbyexplosion.com/discount-remote-control-trucks/',
         // 'https://rchobbyexplosion.com/discount-remote-control-cars/',
         // 'https://rchobbyexplosion.com/discount-remote-control-drones-helicopters/',
