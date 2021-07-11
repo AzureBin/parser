@@ -9,10 +9,9 @@ use App\Helpers\StringHelper;
 
 class Parser extends HtmlParser
 {
-
     public function getMpn(): string
     {
-        return $this->exists('span[itemprop="sku"]') && $this->getText('span[itemprop="sku"]') != null ? $this->getText('span[itemprop="sku"]') : 'NOSKU';
+        return $this->getText('span.product-line-sku-value') != null ? $this->getText('span.product-line-sku-value') : 'NOSKU';
     }
 
     public function getProduct(): string
@@ -53,7 +52,8 @@ class Parser extends HtmlParser
                 }
             });
 
-        return count($attribs) > 0 ? $attribs : ['null'];
+        // bypass the validation if empty attrib exist
+        return count($attribs) > 0 ? $attribs : array('index'=>'null');
     }
 
     public function getShortDescription(): array
@@ -86,14 +86,21 @@ class Parser extends HtmlParser
     {
         // amendment 3
         $check_stock = $this->getAttr('meta[property="og:availability"]', 'content');
-        return $check_stock === "InStock" || $check_stock === "PreOrder" ? self::DEFAULT_AVAIL_NUMBER : 0;
+        if($check_stock === "InStock" || $check_stock === "PreOrder"){
+            return self::DEFAULT_AVAIL_NUMBER;
+        }else{
+            return 0;
+        }
     }
 
     public function getImages(): array
     {
         // amendment 4
-        $img[] = trim($this->getAttr('meta[property="og:image"]', 'content'));
-        return count($img)>0 ? $img : [null] ;
+        if($this->exists('meta[property="og:image"]')){
+            return [$this->getAttr('meta[property="og:image"]', 'content')];
+        }else{
+            return [$this->getAttr('img.center-block', 'src')];
+        }
     }
 
     public function isGroup(): bool
@@ -145,5 +152,17 @@ class Parser extends HtmlParser
         }
 
         return $child;
+    }
+
+    public function getOptions(): array
+    {
+        $child = [];
+
+        $child_lists = $this->filter('div.product-views-option-tile-container label');
+        $child_lists->each(function (ParserCrawler $c) use (&$child) {
+            $child[str_replace(':','',$this->getText('.product-views-option-tile-label'))] = $c->getText('label');
+        });
+
+        return count($child) > 0 ? $child : array('index'=>'null');
     }
 }
