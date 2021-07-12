@@ -18,13 +18,11 @@ class Vendor extends HttpProcessor
     public const PRODUCT_LINK_CSS_SELECTORS = [ 'li.product article.card figure.card-figure a:first-child' ];
 
     protected array $first = [
-        // 'https://rchobbyexplosion.com/discount-remote-control-trucks/'
-        // 'https://rchobbyexplosion.com/rc-batteries/'
         'https://rchobbyexplosion.com/'
     ];
 
     public function isValidFeedItem( FeedItem $fi ): bool
     {
-        return !empty( $fi->getMpn() ) && !empty( $fi->getImages() ) && (empty( $fi->getAttributes()) ? null : $fi->getAttributes());
+        return !empty( $fi->getMpn() ) && !empty( $fi->getImages() );
     }
 }

@@ -9,13 +9,14 @@ use App\Helpers\StringHelper;
 class Parser extends HtmlParser
 {
     private const MAIN_DOMAIN = 'https://rchobbyexplosion.com';
+    public const IN_STOCK = 'IN STOCK';
 
     private array $dims = [];
     private array $shorts = [];
     private ?array $attrs = null;
     private ?float $shipping_weight = null;
     private ?float $list_price = null;
-    private ?int $avail = null;
+    private ?string $avail = null;
     private string $mpn = '';
     private string $product = '';
     private ?string $upc = null;
@@ -74,6 +75,13 @@ class Parser extends HtmlParser
             $this->desc = $descriptionResult[0][0];
         }
 
+        $this->filter( 'div.meta-wrapper' )->each( function ( ParserCrawler $c ) {
+            if ( str_contains( $c->text(), 'Availability:' ) ) {
+                $stock = trim($c->getText( 'dd.productView-info-value' ));
+                $this->avail = ($stock == self::IN_STOCK) ? self::DEFAULT_AVAIL_NUMBER : 0;
+            }
+        });
+
         $this->filter( 'meta' )->each( function ( ParserCrawler $c ) {
             if ($c->attr('itemprop') == 'mpn')
             {
@@ -124,7 +132,7 @@ class Parser extends HtmlParser
 
     public function getAttributes(): ?array
     {
-        return $this->attrs ?? null;
+        return $this->attrs ?: null;
     }
 
     public function getListPrice(): ?float
@@ -139,7 +147,7 @@ class Parser extends HtmlParser
 
     public function getAvail(): ?int
     {
-        return self::DEFAULT_AVAIL_NUMBER;
+        return $this->avail;
     }
 
     public function getUpc(): ?string
