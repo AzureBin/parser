@@ -171,8 +171,6 @@ class Parser extends HtmlParser
 
     public function getVideos(): array
     {
-        return [
-            $this->video
-        ];
+        return $this->video;
     }
 }
