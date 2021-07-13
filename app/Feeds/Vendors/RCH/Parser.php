@@ -10,6 +10,7 @@ class Parser extends HtmlParser
 {
     private const MAIN_DOMAIN = 'https://rchobbyexplosion.com';
     public const IN_STOCK = 'IN STOCK';
+    public const YOUTUBE = 'youtube';
 
     private array $dims = [];
     private array $shorts = [];
@@ -21,6 +22,7 @@ class Parser extends HtmlParser
     private string $product = '';
     private ?string $upc = null;
     private string $desc = '';
+    private array $video = [];
 
     public function beforeParse(): void
     {
@@ -72,12 +74,24 @@ class Parser extends HtmlParser
         $descriptionPattern = "/<p>.*?(?=Features:)/mui";
         preg_match_all($descriptionPattern, $description, $descriptionResult);
         if (isset($descriptionResult[0][0])) {
-            $this->desc = $descriptionResult[0][0];
+            $crawler = new ParserCrawler($descriptionResult[0][0]);
+            $crawler->filter( 'p' )->each( function ( ParserCrawler $c ) {
+                $this->desc .= $c->html();
+            });
+            $crawler->filter( 'div iframe' )->each( function ( ParserCrawler $c ) {
+                if (str_contains( $c->attr('src'), self::YOUTUBE )) {
+                    $this->video = [
+                        'name' => $this->getProduct(),
+                        'provider' => self::YOUTUBE,
+                        'video' => $c->attr('src')
+                    ];
+                }
+            });
         }
 
         $this->filter( 'div.meta-wrapper' )->each( function ( ParserCrawler $c ) {
-            if ( str_contains( $c->text(), 'Availability:' ) ) {
-                $stock = trim($c->getText( 'dd.productView-info-value' ));
+            if ( str_contains( $c->filter('dt')->text(), 'Availability:' ) ) {
+                $stock = trim($c->filter('dd')->text());
                 $this->avail = ($stock == self::IN_STOCK) ? self::DEFAULT_AVAIL_NUMBER : 0;
             }
         });
@@ -153,5 +167,12 @@ class Parser extends HtmlParser
     public function getUpc(): ?string
     {
         return $this->getText('dd.productView-info-value.upc-val');
+    }
+
+    public function getVideos(): array
+    {
+        return [
+            $this->video
+        ];
     }
 }
