@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Feeds\Vendors\HCI;
+namespace App\Feeds\Vendors\HMC;
 
 use App\Feeds\Processor\HttpProcessor;
 
