@@ -63,15 +63,15 @@ class Parser extends HtmlParser
         $featurePattern = "/<p.*?>Features:.*?<\/p><ul.*?>(.*?)<\/ul>/mui";
         preg_match_all($featurePattern, $description, $featureResult);
         $shorts = [];
-        if (isset($featureResult[1][0])) {
-            $crawler = new ParserCrawler($featureResult[1][0]);
+        if (isset($featureResult[0][0])) {
+            $crawler = new ParserCrawler($featureResult[0][0]);
             $crawler->filter( 'li' )->each( function ( ParserCrawler $c ) use (&$shorts) {
                 $shorts[] = $c->text();
             });
         }
         $this->shorts = $shorts;
 
-        $descriptionPattern = "/<p>.*?(?=Features:)/mui";
+        $descriptionPattern = "/<p>.*?(?=(<b>FEATURES<\/b>:|Features:))/mui";
         preg_match_all($descriptionPattern, $description, $descriptionResult);
         if (isset($descriptionResult[0][0])) {
             $crawler = new ParserCrawler($descriptionResult[0][0]);
@@ -81,9 +81,11 @@ class Parser extends HtmlParser
             $crawler->filter( 'div iframe' )->each( function ( ParserCrawler $c ) {
                 if (str_contains( $c->attr('src'), self::YOUTUBE )) {
                     $this->video = [
-                        'name' => $this->getProduct(),
-                        'provider' => self::YOUTUBE,
-                        'video' => $c->attr('src')
+                        [
+                            'name' => $this->getProduct(),
+                            'provider' => self::YOUTUBE,
+                            'video' => $c->attr('src')
+                        ]
                     ];
                 }
             });
