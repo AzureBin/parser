@@ -61,11 +61,11 @@ class Parser extends HtmlParser
         }
         $this->attrs = $attrs;
         /* $featurePattern = "/<p.*?>Features:.*?<\/p><ul.*?>(.*?)<\/ul>/mui"; */
-        $featurePattern = "/<strong>.*?Features:.*?<\/p><ul.*?>(.*?)<\/ul>/mui";
+        $featurePattern = "/<strong>Features:.*?<\/p><ul.*?>(.*?)<\/ul>/mui";
         preg_match_all($featurePattern, $description, $featureResult);
         $shorts = [];
-        if (isset($featureResult[1][0])) {
-            $crawler = new ParserCrawler($featureResult[1][0]);
+        if (isset($featureResult[0][0])) {
+            $crawler = new ParserCrawler($featureResult[0][0]);
             $crawler->filter( 'li' )->each( function ( ParserCrawler $c ) use (&$shorts) {
                 $shorts[] = $c->text();
             });
