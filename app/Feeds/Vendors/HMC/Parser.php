@@ -48,7 +48,7 @@ class Parser extends HtmlParser
                 if (str_contains($c->getText('li'), ':') && $c->getText('li') !== '') {
                     $temp = explode(':', $c->getText('li'));
                     if ($temp[1] !== '' && !str_contains($temp[0], 'Manufacturer Part')) {
-                        $attribs[(string)$temp[0]] = (string)$temp[1];
+                        $attribs[(string)$temp[0]] = trim((string)$temp[1]);
                     }
                 }
             });
@@ -166,13 +166,31 @@ class Parser extends HtmlParser
             $fi->setASIN(array_key_exists('quantityavailable', $c) ? $c['quantityavailable'] : 0);
 
             if (array_key_exists('custitem33', $c)) {
-                $fi->setProduct($this->getText('.product-views-option-tile-label') . $c['custitem33']);
-                if (array_key_exists($c['custitem33'], $c['itemimages_detail']['media'])) {
-                    $fi->setImages([$c['itemimages_detail']['media'][$c['custitem33']]['urls'][0]['url']]);
+                $fi->setProduct(trim(str_replace(':', '', $this->getText('.product-views-option-tile-label'))) . ': ' . trim($c['custitem33']));
+                if ((count($c['itemimages_detail']) > 0) && (array_key_exists($c['custitem33'], $c['itemimages_detail']['media']))) {
+                    $temp_imgs = [];
+                    foreach ($c['itemimages_detail']['media'] as $key => $value) {
+                        if ($c['parent'] === 'LV420806xS') {
+                            if ($key === 'Light Almond' && array_key_exists('040.jpg420806xS_media', $value)) {
+                                $temp_imgs[] = $value['040.jpg420806xS_media'][$key]['urls'][0]['url'];
+                            } else {
+                                $temp_imgs[] = $value['urls'][0]['url'];
+                            }
+                        } elseif ($c['parent'] === 'SO901502x') {
+                            if ($key === 'Black') {
+                                $temp_imgs[] = $value['urls'][0]['url'];
+                            } else {
+                                $temp_imgs[] = $value['url'];
+                            }
+                        } else {
+                            $temp_imgs[] = $c['itemimages_detail']['media'][$c['custitem33']]['urls'][0]['url'];
+                        }
+                    }
+                    $fi->setImages($temp_imgs);
                 }
             } elseif (array_key_exists('custitem127', $c)) {
-                $fi->setProduct($this->getText('.product-views-option-tile-label') . $c['custitem127']);
-                if (array_key_exists($c['custitem127'], $c['itemimages_detail']['media'])) {
+                $fi->setProduct(trim(str_replace(':', '', $this->getText('.product-views-option-tile-label'))) . ':' . trim($c['custitem127']));
+                if ((count($c['itemimages_detail']) > 0) && array_key_exists($c['custitem127'], $c['itemimages_detail']['media'])) {
                     $fi->setImages([$c['itemimages_detail']['media'][$c['custitem127']]['urls'][0]['url']]);
                 }
             }
@@ -185,17 +203,17 @@ class Parser extends HtmlParser
 
     public function getOptions(): array
     {
+        $child = [];
+
         if (!$this->isGroup()) {
-            $child = [];
 
             $child_lists = $this->filter('div.product-views-option-tile-container label');
             $child_lists->each(function (ParserCrawler $c) use (&$child) {
                 $child[str_replace(':', '', $this->getText('.product-views-option-tile-label'))] = $c->getText('label');
             });
-            return count($child) > 0 ? $child : array('index' => 'null');
-        } else {
-            return array('null');
         }
+
+        return $child;
     }
 
     public function getProductFiles(): array
@@ -204,7 +222,7 @@ class Parser extends HtmlParser
 
         $this->filter('div[data-id="product-details-information-2"] p a')
             ->each(function (ParserCrawler $c) use (&$pdf_list) {
-                $pdf_list[] = ['name' => $c->text(), 'link' => $c->attr('href')];
+                $pdf_list[] = ['name' => $c->text(), 'link' => 'https://www.homecontrols.com' . $c->attr('href')];
             });
 
         return $pdf_list;
