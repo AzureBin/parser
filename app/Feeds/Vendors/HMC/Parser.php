@@ -47,7 +47,7 @@ class Parser extends HtmlParser
             ->each(function (ParserCrawler $c) use (&$attribs) {
                 if (str_contains($c->getText('li'), ':') && $c->getText('li') !== '') {
                     $temp = explode(':', $c->getText('li'));
-                    if ($temp[1] !== '' && !str_contains($temp[0], 'Manufacturer Part')) {
+                    if ($temp[1] !== '' && !str_contains($temp[0], 'Manufacturer Part') && !str_contains($temp[0], 'MPN')) {
                         $attribs[(string)$temp[0]] = trim((string)$temp[1]);
                     }
                 }
@@ -67,27 +67,26 @@ class Parser extends HtmlParser
                 }
             });
 
-        $this->filter('#product-details-information-tab-content-container-0 ul:nth-of-type(1)')
+        $this->filter('#product-details-information-tab-content-container-0 ul:nth-of-type(1) li')
             ->each(function (ParserCrawler $c) use (&$shor_desc) {
-                if (!str_contains($c->getText('li'), ':') && $c->getText('li') !== '') {
-                    $shor_desc[] = $c->getText('li');
+                if (!str_contains($c->text(), ':') && $c->text() !== '') {
+                    $shor_desc[] = $c->text();
                 }
             });
 
-        return count($shor_desc) > 0 ? $shor_desc : ['null'];
+        return count($shor_desc) > 0 ? $shor_desc : [];
     }
 
     public function getDescription(): string
     {
         $description = '';
+        $filter = '#product-details-information-tab-content-container-0 .UniqueSellingProposition + p';
 
-        $this->filter('#product-details-information-tab-content-container-0 p:nth-of-type(1)')
-            ->each(function (ParserCrawler $c) use (&$description) {
-                if (!preg_match('/^<[a-z]>/', $c->nodeName())) {
-                    $description = $c->text();
-                }
-            });
-        return $description;
+        while ($this->getText($filter) !== ''){
+            $description = $description . $this->getText($filter);
+            $filter = $filter . ' + p';
+        }
+        return preg_replace('/^\$[0-9]/','',$description);
     }
 
     public function getBrand(): ?string
@@ -189,7 +188,7 @@ class Parser extends HtmlParser
                     $fi->setImages($temp_imgs);
                 }
             } elseif (array_key_exists('custitem127', $c)) {
-                $fi->setProduct(trim(str_replace(':', '', $this->getText('.product-views-option-tile-label'))) . ':' . trim($c['custitem127']));
+                $fi->setProduct(trim(str_replace(':', '', $this->getText('.product-views-option-tile-label'))) . ': ' . trim($c['custitem127']));
                 if ((count($c['itemimages_detail']) > 0) && array_key_exists($c['custitem127'], $c['itemimages_detail']['media'])) {
                     $fi->setImages([$c['itemimages_detail']['media'][$c['custitem127']]['urls'][0]['url']]);
                 }
