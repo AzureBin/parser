@@ -12,7 +12,7 @@ class Parser extends HtmlParser
 {
     public function getMpn(): string
     {
-        return $this->getText('span.product-line-sku-value') !== null ? $this->getText('span.product-line-sku-value') : "";
+        return $this->getText('span.product-line-sku-value');
     }
 
     public function getProduct(): string
@@ -45,7 +45,7 @@ class Parser extends HtmlParser
 
         $this->filter('#product-details-information-tab-1 li')
             ->each(function (ParserCrawler $c) use (&$attribs) {
-                if (str_contains($c->getText('li'), ':') && !empty($c->getText('li'))) {
+                if (!empty($c->getText('li')) && str_contains($c->getText('li'), ':')) {
                     $temp = explode(':', $c->getText('li'));
                     if ($temp[1] !== '' && !str_contains($temp[0], 'Manufacturer Part') && !str_contains($temp[0], 'MPN')) {
                         $attribs[(string)$temp[0]] = trim((string)$temp[1]);
@@ -83,7 +83,7 @@ class Parser extends HtmlParser
         $this->filter('#product-details-information-tab-content-container-0 h2 ~ p')
             ->each(function (ParserCrawler $c) use (&$description){
                 if(!str_contains($c->text(),'strong')){
-                    $description = $description.$c->text();
+                    $description .= $c->outerHtml();
                 }
             });
         return $description;
@@ -99,9 +99,8 @@ class Parser extends HtmlParser
         $check_stock = $this->getAttr('meta[property="og:availability"]', 'content');
         if ($check_stock === "InStock" || $check_stock === "PreOrder") {
             return self::DEFAULT_AVAIL_NUMBER;
-        } else {
-            return 0;
         }
+        return 0;
     }
 
     public function getImages(): array
@@ -162,7 +161,7 @@ class Parser extends HtmlParser
                 $fi->setCostToUs(0);
             }
 
-            $fi->setASIN(array_key_exists('quantityavailable', $c) ? $c['quantityavailable'] : 0);
+            $fi->setRAvail(array_key_exists('quantityavailable', $c) ? $c['quantityavailable'] : 0);
 
             $temp_imgs = [];
 
