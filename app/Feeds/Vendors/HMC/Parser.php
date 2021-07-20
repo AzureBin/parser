@@ -7,7 +7,7 @@ use App\Feeds\Parser\HtmlParser;
 use App\Feeds\Utils\ParserCrawler;
 use App\Helpers\StringHelper;
 
-// task 1,2,3,4,5,6,7,8,9,10,11,12,13,14,16,17
+
 class Parser extends HtmlParser
 {
     public function getMpn(): string
@@ -17,26 +17,19 @@ class Parser extends HtmlParser
 
     public function getProduct(): string
     {
-        return trim($this->getAttr('meta[property="og:title"]', 'content'));
+        return !empty($this->getAttr('meta[property="og:title"]', 'content')) ? $this->getAttr('meta[property="og:title"]', 'content') : '';
     }
 
     public function getListPrice(): ?float
     {
-        if ($this->exists('span[itemprop="highPrice"]')) {
-            return $this->getAttr('span[itemprop="highPrice"]', 'data-rate') !== 0.0 ? StringHelper::getFloat($this->getAttr('span[itemprop="highPrice"]', 'data-rate')) : 0;
-        }
-        return $this->getAttr('span[itemprop="price"]', 'data-rate') !== 0.0 ? StringHelper::getFloat($this->getAttr('span[itemprop="price"]', 'data-rate')) : 0;
+        return StringHelper::getFloat($this->getAttr('span[itemprop="highPrice"]', 'data-rate')) ?:
+            StringHelper::getFloat($this->getAttr('span[itemprop="price"]', 'data-rate'));
     }
 
     public function getCostToUs(): float
     {
-        if ($this->exists('span[itemprop="lowPrice"]')) {
-            return $this->getAttr('span[itemprop="lowPrice"]', 'data-rate') !== 0.0 ? StringHelper::getFloat($this->getAttr('span[itemprop="lowPrice"]', 'data-rate')) : 0;
-        } elseif ($this->exists('span[itemprop="price"]')) {
-            return $this->getAttr('span[itemprop="price"]', 'data-rate') !== 0.0 ? StringHelper::getFloat($this->getAttr('span[itemprop="price"]', 'data-rate')) : 0;
-        } else {
-            return 0;
-        }
+        return StringHelper::getFloat($this->getAttr('span[itemprop="lowPrice"]', 'data-rate'),0.0) ?:
+            StringHelper::getFloat($this->getAttr('span[itemprop="price"]', 'data-rate'),0.0);
     }
 
     public function getAttributes(): ?array
@@ -82,7 +75,7 @@ class Parser extends HtmlParser
         $description = '';
         $this->filter('#product-details-information-tab-content-container-0 h2 ~ p')
             ->each(function (ParserCrawler $c) use (&$description){
-                if(!str_contains($c->text(),'strong')){
+                if(!str_contains($c->outerHtml(),'strong')){
                     $description .= $c->outerHtml();
                 }
             });
@@ -152,15 +145,8 @@ class Parser extends HtmlParser
             $fi = clone $parent_fi;
 
             $fi->setMpn('' . $c['itemid']);
-
-            if (array_key_exists('onlinecustomerprice', $c) && $c['onlinecustomerprice'] !== 0.0) {
-                $fi->setListPrice(StringHelper::getFloat($c['onlinecustomerprice']));
-                $fi->setCostToUs(StringHelper::getFloat($c['onlinecustomerprice']));
-            } else {
-                $fi->setListPrice(0);
-                $fi->setCostToUs(0);
-            }
-
+            array_key_exists('onlinecustomerprice', $c) ? $fi->setListPrice(StringHelper::getFloat($c['onlinecustomerprice'])) : 0.0;
+            $fi->setCostToUs(StringHelper::getFloat($c['onlinecustomerprice'],0.0));
             $fi->setRAvail(array_key_exists('quantityavailable', $c) ? $c['quantityavailable'] : 0);
 
             $temp_imgs = [];
@@ -197,7 +183,7 @@ class Parser extends HtmlParser
             $fi->setImages(array_unique($temp_imgs));
             if(array_key_exists('custitem481',$data['items'][0])){
                 $temp_brand = explode('/', $data['items'][0]['custitem481']);
-                $fi->setBrandName($temp_brand[1]);
+                $fi->setBrandName($temp_brand[1] ?? '');
             }
 
             $child[] = $fi;
