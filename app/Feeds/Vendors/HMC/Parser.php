@@ -45,7 +45,7 @@ class Parser extends HtmlParser
 
         $this->filter('#product-details-information-tab-1 li')
             ->each(function (ParserCrawler $c) use (&$attribs) {
-                if (str_contains($c->getText('li'), ':') && $c->getText('li') !== '') {
+                if (str_contains($c->getText('li'), ':') && !empty($c->getText('li'))) {
                     $temp = explode(':', $c->getText('li'));
                     if ($temp[1] !== '' && !str_contains($temp[0], 'Manufacturer Part') && !str_contains($temp[0], 'MPN')) {
                         $attribs[(string)$temp[0]] = trim((string)$temp[1]);
@@ -53,7 +53,7 @@ class Parser extends HtmlParser
                 }
             });
 
-        return count($attribs) > 0 ? $attribs : array('index' => 'null');
+        return count($attribs) > 0 ? $attribs : [];
     }
 
     public function getShortDescription(): array
@@ -80,12 +80,12 @@ class Parser extends HtmlParser
     public function getDescription(): string
     {
         $description = '';
-        $filter = '#product-details-information-tab-content-container-0 .UniqueSellingProposition + p';
-
-        while ($this->getText($filter) !== ''){
-            $description = $description . $this->getText($filter);
-            $filter = $filter . ' + p';
-        }
+        $this->filter('#product-details-information-tab-content-container-0 h2 ~ p')
+            ->each(function (ParserCrawler $c) use (&$description){
+                if(!str_contains($c->text(),'strong')){
+                    $description = $description.$c->text();
+                }
+            });
         return $description;
     }
 
@@ -196,6 +196,10 @@ class Parser extends HtmlParser
             }
 
             $fi->setImages(array_unique($temp_imgs));
+            if(array_key_exists('custitem481',$data['items'][0])){
+                $temp_brand = explode('/', $data['items'][0]['custitem481']);
+                $fi->setBrandName($temp_brand[1]);
+            }
 
             $child[] = $fi;
         }
