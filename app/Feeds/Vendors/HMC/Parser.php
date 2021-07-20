@@ -63,14 +63,14 @@ class Parser extends HtmlParser
         $this->filter('#product-details-information-tab-1 li')
             ->each(function (ParserCrawler $c) use (&$shor_desc) {
                 if (!str_contains($c->getText('li'), ':') && $c->getText('li') != '') {
-                    $shor_desc[] = $c->getText('li');
+                    $shor_desc[] = preg_replace('/[$0-9]/','',$c->getText('li'));
                 }
             });
 
         $this->filter('#product-details-information-tab-content-container-0 ul:nth-of-type(1) li')
             ->each(function (ParserCrawler $c) use (&$shor_desc) {
                 if (!str_contains($c->text(), ':') && $c->text() !== '') {
-                    $shor_desc[] = $c->text();
+                    $shor_desc[] = preg_replace('/[$0-9]/','',$c->text());
                 }
             });
 
@@ -86,7 +86,7 @@ class Parser extends HtmlParser
             $description = $description . $this->getText($filter);
             $filter = $filter . ' + p';
         }
-        return preg_replace('/^\$[0-9]/','',$description);
+        return $description;
     }
 
     public function getBrand(): ?string
