@@ -164,10 +164,11 @@ class Parser extends HtmlParser
 
             $fi->setASIN(array_key_exists('quantityavailable', $c) ? $c['quantityavailable'] : 0);
 
+            $temp_imgs = [];
+
             if (array_key_exists('custitem33', $c)) {
                 $fi->setProduct(trim(str_replace(':', '', $this->getText('.product-views-option-tile-label'))) . ': ' . trim($c['custitem33']));
                 if ((count($c['itemimages_detail']) > 0) && (array_key_exists($c['custitem33'], $c['itemimages_detail']['media']))) {
-                    $temp_imgs = [];
                     foreach ($c['itemimages_detail']['media'] as $key => $value) {
                         if ($c['parent'] === 'LV420806xS') {
                             if ($key === 'Light Almond' && array_key_exists('040.jpg420806xS_media', $value)) {
@@ -185,14 +186,16 @@ class Parser extends HtmlParser
                             $temp_imgs[] = $c['itemimages_detail']['media'][$c['custitem33']]['urls'][0]['url'];
                         }
                     }
-                    $fi->setImages($temp_imgs);
+
                 }
             } elseif (array_key_exists('custitem127', $c)) {
                 $fi->setProduct(trim(str_replace(':', '', $this->getText('.product-views-option-tile-label'))) . ': ' . trim($c['custitem127']));
                 if ((count($c['itemimages_detail']) > 0) && array_key_exists($c['custitem127'], $c['itemimages_detail']['media'])) {
-                    $fi->setImages([$c['itemimages_detail']['media'][$c['custitem127']]['urls'][0]['url']]);
+                    $temp_imgs[] = $c['itemimages_detail']['media'][$c['custitem127']]['urls'][0]['url'];
                 }
             }
+
+            $fi->setImages(array_unique($temp_imgs));
 
             $child[] = $fi;
         }
