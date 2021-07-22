@@ -36,14 +36,16 @@ class Parser extends HtmlParser
     {
         $attribs = [];
 
-        $this->filter('#product-details-information-tab-1 li')
-            ->each(function (ParserCrawler $c) use (&$attribs) {
-                if (!empty($c->getText('li')) && str_contains($c->getText('li'), ':')) {
-                    $temp = explode(':', $c->getText('li'));
-                    if ($temp[1] !== '' && !str_contains($temp[0], 'Manufacturer Part') && !str_contains($temp[0], 'MPN')) {
-                        $attribs[(string)$temp[0]] = trim((string)$temp[1]);
+        $this->filter('#product-details-information-tab-1 ul')
+            ->each(function (ParserCrawler $crawler) use (&$attribs) {
+                $crawler->filter('li')->each(function (ParserCrawler $c) use (&$attribs){
+                    if (!empty($c->getText('li')) && str_contains($c->getText('li'), ':')) {
+                        $temp = explode(':', $c->getText('li'));
+                        if ($temp[1] !== '' && !str_contains($temp[0], 'Manufacturer Part') && !str_contains($temp[0], 'MPN')) {
+                            $attribs[(string)$temp[0]] = trim((string)$temp[1]);
+                        }
                     }
-                }
+                });
             });
 
         return count($attribs) > 0 ? $attribs : [];
