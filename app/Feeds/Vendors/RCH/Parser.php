@@ -5,6 +5,8 @@ namespace App\Feeds\Vendors\RCH;
 use App\Feeds\Parser\HtmlParser;
 use App\Feeds\Utils\ParserCrawler;
 use App\Helpers\StringHelper;
+use App\Helpers\FeedHelper;
+use Illuminate\Support\Str;
 
 class Parser extends HtmlParser
 {
@@ -27,19 +29,53 @@ class Parser extends HtmlParser
     public function beforeParse(): void
     {
         $this->filter( '#tab-description ul li' )->each( function ( ParserCrawler $c ) {
-            if ( str_contains( $c->text(), 'Weight:' ) ) {
-                if (preg_match('#\((.*?)\)#', $c->text(), $m)) {
-                    $this->shipping_weight = (float) preg_replace("/[^0-9.]/", "", $m[1]);
-                }
-            }
-            elseif ( str_contains( $c->text(), 'Length:' ) ) {
-                if (preg_match('#\((.*?)\)#', $c->text(), $m)) {
-                    $this->dims[ 'x' ] = (float) preg_replace("/[^0-9.]/", "", $m[1]);
-                }
-            }
-            elseif ( str_contains( $c->text(), 'Width:' ) ) {
-                if (preg_match('#\((.*?)\)#', $c->text(), $m)) {
-                    $this->dims[ 'y' ] = (float) preg_replace("/[^0-9.]/", "", $m[1]);
+            if ( str_contains( $c->text(), ':' ) ) {
+                [ $key, $val ] = explode( ':', $c->text() );
+                switch (Str::upper($key)){
+                    case 'WEIGHT':
+                        if (preg_match('#\((.*?)\)#', $c->text(), $m)) {
+                            if (str_contains($m[1], 'g')) {
+                                $this->shipping_weight = FeedHelper::convertLbsFromG(preg_replace("/[^0-9.]/", "", $m[1]));
+                            }
+                        }
+                        break;
+                    case 'LENGTH':
+                        if (preg_match('#\((.*?)\)#', $c->text(), $m)) {
+                            $this->dims[ 'x' ] = (float) preg_replace("/[^0-9.]/", "", $m[1]);
+                        }
+                        break;
+                    case 'WIDTH':
+                        if (preg_match('#\((.*?)\)#', $c->text(), $m)) {
+                            $this->dims[ 'y' ] = (float) preg_replace("/[^0-9.]/", "", $m[1]);
+                        }
+                        break;
+                    case 'HEIGHT':
+                        if (preg_match('#\((.*?)\)#', $c->text(), $m)) {
+                            $this->dims[ 'z' ] = (float) preg_replace("/[^0-9.]/", "", $m[1]);
+                        }
+                        break;
+                    case 'DIMENSIONS':
+                        if (str_contains($val, 'mm')) {
+                            $val = preg_replace("/[^0-9.x]/", "", $val);
+                            $this->dims = FeedHelper::getDimsInString($val, 'x');
+                            $dimensions = explode('x', $val);
+                            foreach ($this->dims as &$dimension){
+                               $dimension = FeedHelper::convert($dimension, '0.0393701'); 
+                            }
+                        }
+                        else if(str_contains($val, 'in')) {
+                            $this->dims = FeedHelper::getDimsInString($dimension, 'x');
+                        }
+                        break;
+                    default:
+                        if (trim( $val ) !== '') {
+                            if (mb_strlen( $val, 'utf8' ) < 500) {
+                                if (preg_match( '/(\d+\.\d+|\.\d+|\d+)/', $key, $match_key ) && $match_key[ 1 ] !== trim( $key )) {
+                                    $this->attrs[ StringHelper::normalizeSpaceInString( $key ) ] = StringHelper::normalizeSpaceInString( $val );
+                                }
+                            }
+                        }
+                        break;
                 }
             }
         });
@@ -47,19 +83,6 @@ class Parser extends HtmlParser
         $description = $this->getHtml('#tab-description');
         $description = preg_replace("/\r|\n/", "", $description);
 
-        $technicalSpecsPattern = "/TECHNICAL SPECS:.*?<\/p><ul>(.*?)<\/ul>/mui";
-        preg_match_all($technicalSpecsPattern, $description, $result);
-        $attrs = [];
-        if (isset($result[1][0])) {
-            $crawler = new ParserCrawler($result[1][0]);
-            $crawler->filter( 'li' )->each( function ( ParserCrawler $c ) use (&$attrs) {
-                if ( str_contains( $c->text(), ':' ) ) {
-                    [ $key, $val ] = explode( ':', $c->text() );
-                    $attrs[ StringHelper::normalizeSpaceInString( $key ) ] = StringHelper::normalizeSpaceInString( $val );
-                }
-            });
-        }
-        $this->attrs = $attrs;
         /* $featurePattern = "/<p.*?>Features:.*?<\/p><ul.*?>(.*?)<\/ul>/mui"; */
         $featurePattern = "/<strong>Features:.*?<\/p><ul.*?>(.*?)<\/ul>/mui";
         preg_match_all($featurePattern, $description, $featureResult);
