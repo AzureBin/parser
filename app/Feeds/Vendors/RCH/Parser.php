@@ -19,7 +19,7 @@ class Parser extends HtmlParser
     private ?array $attrs = null;
     private ?float $shipping_weight = null;
     private ?float $list_price = null;
-    private ?string $avail = null;
+    private ?int $avail = null;
     private string $mpn = '';
     private string $product = '';
     private ?string $upc = null;
@@ -35,7 +35,12 @@ class Parser extends HtmlParser
                     case 'WEIGHT':
                         if (preg_match('#\((.*?)\)#', $c->text(), $m)) {
                             if (str_contains($m[1], 'g')) {
-                                $this->shipping_weight = FeedHelper::convertLbsFromG(preg_replace("/[^0-9.]/", "", $m[1]));
+                                $this->shipping_weight = FeedHelper::convertLbsFromG((float)preg_replace("/[^0-9.]/", "", $m[1]));
+                            }
+                        }
+                        else {
+                            if (str_contains($val, 'g')) {
+                                $this->shipping_weight = FeedHelper::convertLbsFromG((float)preg_replace("/[^0-9.]/", "", $val));
                             }
                         }
                         break;
@@ -46,12 +51,12 @@ class Parser extends HtmlParser
                         break;
                     case 'WIDTH':
                         if (preg_match('#\((.*?)\)#', $c->text(), $m)) {
-                            $this->dims[ 'y' ] = (float) preg_replace("/[^0-9.]/", "", $m[1]);
+                            $this->dims[ 'z' ] = (float) preg_replace("/[^0-9.]/", "", $m[1]);
                         }
                         break;
                     case 'HEIGHT':
                         if (preg_match('#\((.*?)\)#', $c->text(), $m)) {
-                            $this->dims[ 'z' ] = (float) preg_replace("/[^0-9.]/", "", $m[1]);
+                            $this->dims[ 'y' ] = (float) preg_replace("/[^0-9.]/", "", $m[1]);
                         }
                         break;
                     case 'DIMENSIONS':
@@ -90,7 +95,9 @@ class Parser extends HtmlParser
         if (isset($featureResult[0][0])) {
             $crawler = new ParserCrawler($featureResult[0][0]);
             $crawler->filter( 'li' )->each( function ( ParserCrawler $c ) use (&$shorts) {
-                $shorts[] = $c->text();
+                if ( !str_contains( $c->text(), ':' ) ) {
+                    $shorts[] = $c->text();
+                }
             });
         }
         $this->shorts = $shorts;
@@ -117,7 +124,7 @@ class Parser extends HtmlParser
 
         $this->filter( 'div.meta-wrapper' )->each( function ( ParserCrawler $c ) {
             if ( str_contains( $c->filter('dt')->text(), 'Availability:' ) ) {
-                $stock = trim($c->filter('dd')->text());
+                $stock = Str::upper(trim($c->filter('dd')->text()));
                 $this->avail = ($stock == self::IN_STOCK) ? self::DEFAULT_AVAIL_NUMBER : 0;
             }
         });
