@@ -1,5 +1,4 @@
 <?php
-declare(strict_types=1);
 
 namespace App\Feeds\Vendors\PRP;
 
@@ -9,103 +8,7 @@ use App\Feeds\Utils\ParserCrawler;
 
 class Parser extends HtmlParser
 {
-    public function getProduct(): string
-    {
-         return $this->getText('#centercolumn > h1');
-    }
-
-    public function getDescription(): string
-    {
-       return '<ul>' . $this->getHtml( '#tabs-1 > ul' ) . '</ul>';
-    }
-
-    public function getShortDescription(): array
-    {
-        return $this->getContent('#tabs-2');
-    }
-
-    public function getImages(): array
-    {
-        $images = $this->getSrcImages('#gallery_nav > a > img');
-        return count($images) > 0 ? $images : $this->getSrcImages('#pageGraphic');
-    }
-
-    public function isGroup(): bool
-    {
-        // return $this->exists('#addToCart > .product');
-         return $this->filter('#addToCart > .product')->count() > 1;
-    }
-
-    public function getChildProducts(FeedItem $parent_fi): array
-    {
-        $children = [];
-
-        $this->filter('#addToCart > .product')->each(function (ParserCrawler $node) use (&$parent_fi, &$children) {
-            $fi = clone $parent_fi;
-
-            // get mpn & upc
-            $fi->setMpn($this->extractMpn($node));
-            $fi->setUpc($this->extractUPC($node));
-
-            // get color
-            $fi->setOptions(['color' => $this->extractColor($node)]);
-
-            // get price
-            $fi->setCostToUs($this->extractPrice($node));
-
-            // get dimensions
-            $dimensions = $this->extractDimensions($node);
-            $fi->setDimX($dimensions[0] ?? null);
-            $fi->setDimY($dimensions[1] ?? null);
-            $fi->setDimZ($dimensions[2] ?? null);
-
-            $fi->setRAvail(self::DEFAULT_AVAIL_NUMBER);
-
-            $children[] = $fi;
-        });
-
-        return $children;
-    }
-
-    public function getMpn(): string
-    {
-        return $this->extractMpn($this->filter('.product'));
-    }
-
-    public function getUpc(): ?string
-    {
-        return $this->isGroup() ? null : $this->extractUPC($this->filter('.product'));
-    }
-
-    public function getCostToUs(): float
-    {
-        return $this->extractPrice($this->node);
-    }
-
-    public function getAvail(): ?int
-    {
-        return self::DEFAULT_AVAIL_NUMBER;
-    }
-
-    public function getOptions(): array
-    {
-        return ['color' => $this->extractColor($this->node)];
-    }
-
-    public function getDimX(): ?float
-    {
-        return $this->extractDimensions($this->node)[0] ?? null;
-    }
-
-    public function getDimY(): ?float
-    {
-        return $this->extractDimensions($this->node)[1] ?? null;
-    }
-
-    public function getDimZ(): ?float
-    {
-        return $this->extractDimensions($this->node)[2] ?? null;
-    }
+    private array  $options = [];
 
     private function extractMpn(ParserCrawler $node): string
     {
@@ -141,5 +44,127 @@ class Parser extends HtmlParser
         preg_match("@(\d+(?:\.\d{1,2})?)\"\sx\s(\d+(?:\.\d{1,2})?)\"(?:\sx\s(\d+(?:\.\d{1,2})?)\")?@", $dimensionsStr, $matches);
 
         return array_map('floatval', array_slice($matches, 1));
+    }
+
+    public function getProduct(): string
+    {
+         return $this->getText('#centercolumn > h1');
+    }
+
+    public function getDescription(): string
+    {
+        $all = $this->getHtml('#tabs-2');
+        $notNeed = '<ul>' . $this->getHtml('#tabs-2 > ul:first-child') . '</ul>';
+
+        return str_replace($notNeed, '', $all);
+    }
+
+    public function getShortDescription(): array
+    {
+        $descriptions = $this->getContent( '#tabs-1 > ul > li, #tabs-2 > ul:first-child > li' );
+        $output = [];
+
+        foreach ($descriptions as $value) {
+            $pos = strpos($value, ':');
+            if ($pos === false) {
+                $output[] = $value;
+            } else {
+                $this->options[str_replace("\xc2\xa0", '', substr($value, 0, $pos))] = substr($value, $pos + 2);
+            }
+        }
+
+        return $output;
+    }
+
+    public function getImages(): array
+    {
+        $images = $this->getSrcImages('#gallery_nav > a > img');
+        return count($images) > 0 ? $images : $this->getSrcImages('#pageGraphic');
+    }
+
+    public function isGroup(): bool
+    {
+         return $this->filter('#addToCart > .product')->count() > 1;
+    }
+
+    public function getChildProducts(FeedItem $parent_fi): array
+    {
+        $children = [];
+
+        $this->filter('#addToCart > .product')->each(function (ParserCrawler $node) use (&$parent_fi, &$children) {
+            $fi = clone $parent_fi;
+
+            // get mpn & upc
+            $fi->setMpn($this->extractMpn($node));
+            $fi->setUpc($this->extractUPC($node));
+
+            // get color
+            $color = $this->extractColor($node);
+            $fi->setOptions(array_merge(['Color' => $color], $this->options));
+
+            // get price
+            $fi->setCostToUs($this->extractPrice($node));
+
+            // get dimensions
+            $dimensions = $this->extractDimensions($node);
+            $dimX = $dimensions[0] ?? null;
+            $dimY = $dimensions[1] ?? null;
+            $dimZ = $dimensions[2] ?? null;
+            $fi->setDimX($dimX);
+            $fi->setDimY($dimY);
+            $fi->setDimZ($dimZ);
+
+            // generate child product name
+            $fi->setProduct('Color:' . $color . '. Size:' .  $dimX . '"X' . $dimY);
+
+            $fi->setRAvail(self::DEFAULT_AVAIL_NUMBER);
+            $children[] = $fi;
+        });
+
+        return $children;
+    }
+
+    public function getMpn(): string
+    {
+        return $this->extractMpn($this->filter('.product'));
+    }
+
+    public function getUpc(): ?string
+    {
+        return $this->isGroup() ? null : $this->extractUPC($this->filter('.product'));
+    }
+
+    public function getCostToUs(): float
+    {
+        return $this->extractPrice($this->node);
+    }
+
+    public function getAvail(): ?int
+    {
+        return self::DEFAULT_AVAIL_NUMBER;
+    }
+
+    public function getOptions(): array
+    {
+        $options = [
+            'Color' => $this->extractColor($this->node)
+        ];
+
+        return array_merge($options, $this->options);
+    }
+
+    public function getDimX(): ?float
+    {
+        return $this->extractDimensions($this->node)[0] ?? null;
+    }
+
+    public function getDimY(): ?float
+    {
+        return $this->extractDimensions($this->node)[1] ?? null;
+    }
+
+    public function getDimZ(): ?float
+    {
+        return $this->extractDimensions($this->node)[2] ?? null;
     }
 }
