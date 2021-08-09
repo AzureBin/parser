@@ -8,7 +8,7 @@ use App\Feeds\Utils\ParserCrawler;
 
 class Parser extends HtmlParser
 {
-    private array  $options = [];
+    private array  $attributes = [];
 
     private function extractMpn(ParserCrawler $node): string
     {
@@ -61,16 +61,23 @@ class Parser extends HtmlParser
 
     public function getShortDescription(): array
     {
-        $descriptions = $this->getContent( '#tabs-1 > ul > li, #tabs-2 > ul:first-child > li' );
         $output = [];
+        $ulDescriptions = $this->getContent( '#tabs-1 > ul > li, #tabs-2 > ul:first-child > li' );
+        $pDescriptions  = $this->getContent('#tabs-1 > p');
 
-        foreach ($descriptions as $value) {
-            $pos = strpos($value, ':');
-            if ($pos === false) {
-                $output[] = $value;
-            } else {
-                $this->options[str_replace("\xc2\xa0", '', substr($value, 0, $pos))] = substr($value, $pos + 2);
+        if (count($ulDescriptions) > 0){
+            foreach ($ulDescriptions as $value) {
+                $pos = strpos($value, ':');
+                if ($pos === false) {
+                    $output[] = $value;
+                } else {
+                    $this->attributes[str_replace("\xc2\xa0", '', substr($value, 0, $pos))] = substr($value, $pos + 2);
+                }
             }
+        }
+
+        if (count($pDescriptions) > 0){
+            $output[] = $pDescriptions[0];
         }
 
         return $output;
@@ -100,7 +107,7 @@ class Parser extends HtmlParser
 
             // get color
             $color = $this->extractColor($node);
-            $fi->setOptions(array_merge(['Color' => $color], $this->options));
+            $fi->setAttributes(array_merge(['Color' => $color], $this->attributes));
 
             // get price
             $fi->setCostToUs($this->extractPrice($node));
@@ -115,7 +122,7 @@ class Parser extends HtmlParser
             $fi->setDimZ($dimZ);
 
             // generate child product name
-            $fi->setProduct('Color:' . $color . '. Size:' .  $dimX . '"X' . $dimY);
+            $fi->setProduct('Color: ' . $color . '. Size: ' .  $dimX . '"X' . $dimY);
 
             $fi->setRAvail(self::DEFAULT_AVAIL_NUMBER);
             $children[] = $fi;
@@ -144,13 +151,13 @@ class Parser extends HtmlParser
         return self::DEFAULT_AVAIL_NUMBER;
     }
 
-    public function getOptions(): array
+    public function getAttributes(): ?array
     {
-        $options = [
+        $attributes = [
             'Color' => $this->extractColor($this->node)
         ];
 
-        return array_merge($options, $this->options);
+        return array_merge($attributes, $this->attributes);
     }
 
     public function getDimX(): ?float
