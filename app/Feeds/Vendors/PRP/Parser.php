@@ -8,7 +8,8 @@ use App\Feeds\Utils\ParserCrawler;
 
 class Parser extends HtmlParser
 {
-    private array  $attributes = [];
+    private ?array $dimensions = null;
+    private array $attributes = [];
 
     private function extractMpn(ParserCrawler $node): string
     {
@@ -37,13 +38,17 @@ class Parser extends HtmlParser
         return $matches[1];
     }
 
-    private function extractDimensions(ParserCrawler $node): array
+    private function getDimensions(ParserCrawler $node): array
     {
-        $dimensionsStr = $node->filter('.productDescription')->text();
-        $matches = [];
-        preg_match("@(\d+(?:\.\d{1,2})?)\"\sx\s(\d+(?:\.\d{1,2})?)\"(?:\sx\s(\d+(?:\.\d{1,2})?)\")?@", $dimensionsStr, $matches);
+        if ($this->dimensions === null) {
+            $dimensions_str = $node->filter('.productDescription')->text();
+            $matches = [];
+            preg_match("@(\d+(?:\.\d{1,2})?)\"\sx\s(\d+(?:\.\d{1,2})?)\"(?:\sx\s(\d+(?:\.\d{1,2})?)\")?@", $dimensions_str, $matches);
 
-        return array_map('floatval', array_slice($matches, 1));
+            $this->dimensions = array_map('floatval', array_slice($matches, 1));
+        }
+
+        return $this->dimensions;
     }
 
     public function getProduct(): string
@@ -53,20 +58,20 @@ class Parser extends HtmlParser
 
     public function getDescription(): string
     {
-        $all = $this->getHtml('#tabs-2');
-        $notNeed = '<ul>' . $this->getHtml('#tabs-2 > ul:first-child') . '</ul>';
+        $whole_desc = $this->getHtml('#tabs-2');
+        $not_need_part = '<ul>' . $this->getHtml('#tabs-2 > ul:first-child') . '</ul>';
 
-        return str_replace($notNeed, '', $all);
+        return str_replace($not_need_part, '', $whole_desc);
     }
 
     public function getShortDescription(): array
     {
         $output = [];
-        $ulDescriptions = $this->getContent( '#tabs-1 > ul > li, #tabs-2 > ul:first-child > li' );
-        $pDescriptions  = $this->getContent('#tabs-1 > p');
+        $ul_descriptions = $this->getContent( '#tabs-1 > ul > li, #tabs-2 > ul:first-child > li' );
+        $p_descriptions  = $this->getContent('#tabs-1 > p');
 
-        if (count($ulDescriptions) > 0){
-            foreach ($ulDescriptions as $value) {
+        if (count($ul_descriptions) > 0){
+            foreach ($p_descriptions as $value) {
                 $pos = strpos($value, ':');
                 if ($pos === false) {
                     $output[] = $value;
@@ -76,8 +81,8 @@ class Parser extends HtmlParser
             }
         }
 
-        if (count($pDescriptions) > 0){
-            $output[] = $pDescriptions[0];
+        if (count($p_descriptions) > 0){
+            $output[] = $p_descriptions[0];
         }
 
         return $output;
@@ -113,16 +118,16 @@ class Parser extends HtmlParser
             $fi->setCostToUs($this->extractPrice($node));
 
             // get dimensions
-            $dimensions = $this->extractDimensions($node);
-            $dimX = $dimensions[0] ?? null;
-            $dimY = $dimensions[1] ?? null;
-            $dimZ = $dimensions[2] ?? null;
-            $fi->setDimX($dimX);
-            $fi->setDimY($dimY);
-            $fi->setDimZ($dimZ);
+            $dimensions = $this->getDimensions($node);
+            $dim_x = $dimensions[0] ?? null;
+            $dim_y = $dimensions[1] ?? null;
+            $dim_z = $dimensions[2] ?? null;
+            $fi->setDimX($dim_x);
+            $fi->setDimY($dim_y);
+            $fi->setDimZ($dim_x);
 
             // generate child product name
-            $fi->setProduct('Color: ' . $color . '. Size: ' .  $dimX . '"X' . $dimY);
+            $fi->setProduct('Color: ' . $color . '. Size: ' .  $dim_x . '"X' . $dim_y);
 
             $fi->setRAvail(self::DEFAULT_AVAIL_NUMBER);
             $children[] = $fi;
@@ -162,16 +167,16 @@ class Parser extends HtmlParser
 
     public function getDimX(): ?float
     {
-        return $this->extractDimensions($this->node)[0] ?? null;
+        return $this->getDimensions($this->node)[0] ?? null;
     }
 
     public function getDimY(): ?float
     {
-        return $this->extractDimensions($this->node)[1] ?? null;
+        return $this->getDimensions($this->node)[1] ?? null;
     }
 
     public function getDimZ(): ?float
     {
-        return $this->extractDimensions($this->node)[2] ?? null;
+        return $this->getDimensions($this->node)[2] ?? null;
     }
 }
