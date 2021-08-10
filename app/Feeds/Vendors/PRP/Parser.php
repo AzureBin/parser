@@ -40,13 +40,11 @@ class Parser extends HtmlParser
 
     private function getDimensions(ParserCrawler $node): array
     {
-        if ($this->dimensions === null) {
-            $dimensions_str = $node->filter('.productDescription')->text();
-            $matches = [];
-            preg_match("@(\d+(?:\.\d{1,2})?)\"\sx\s(\d+(?:\.\d{1,2})?)\"(?:\sx\s(\d+(?:\.\d{1,2})?)\")?@", $dimensions_str, $matches);
+        $dimensions_str = $node->filter('.productDescription')->text();
 
-            $this->dimensions = array_map('floatval', array_slice($matches, 1));
-        }
+        $matches = [];
+        preg_match("@(\d+(?:\.\d{1,2})?)\"\sx\s(\d+(?:\.\d{1,2})?)\"(?:\sx\s(\d+(?:\.\d{1,2})?)\")?@", $dimensions_str, $matches);
+        $this->dimensions = array_map('floatval', array_slice($matches, 1));
 
         return $this->dimensions;
     }
@@ -124,7 +122,7 @@ class Parser extends HtmlParser
             $dim_z = $dimensions[2] ?? null;
             $fi->setDimX($dim_x);
             $fi->setDimY($dim_y);
-            $fi->setDimZ($dim_x);
+            $fi->setDimZ($dim_z);
 
             // generate child product name
             $fi->setProduct('Color: ' . $color . '. Size: ' .  $dim_x . '"X' . $dim_y);
