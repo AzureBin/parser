@@ -11,6 +11,11 @@ use Symfony\Component\DomCrawler\Crawler;
 
 class Parser extends HtmlParser
 {
+    private function hasSku(): bool
+    {
+        return $this->filter('.trustpilot-widget')->count() > 0;
+    }
+
     private function sanitizeAttributeValue(string $value): string
     {
         if (StringHelper::existsMoney($value)) {
@@ -32,11 +37,6 @@ class Parser extends HtmlParser
         }
 
         return parent::parseContent($data, $params);
-    }
-
-    public function hasSku(): bool
-    {
-        return $this->filter('.trustpilot-widget')->count() > 0;
     }
 
     public function isGroup(): bool
