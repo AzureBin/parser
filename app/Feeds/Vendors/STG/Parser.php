@@ -6,11 +6,21 @@ use App\Feeds\Feed\FeedItem;
 use App\Feeds\Parser\HtmlParser;
 use App\Feeds\Utils\Data;
 use App\Feeds\Utils\Link;
+use App\Feeds\Utils\ParserCrawler;
 use App\Helpers\StringHelper;
 use Symfony\Component\DomCrawler\Crawler;
 
 class Parser extends HtmlParser
 {
+    private array $options = [];
+    private ?float $weight = null;
+    private ?string $brand = null;
+
+    private function extractWeight(string $str): float
+    {
+        return (float) explode('|', $str)[1] / 453.592;
+    }
+
     private function hasSku(): bool
     {
         return $this->filter('.trustpilot-widget')->count() > 0;
@@ -29,13 +39,30 @@ class Parser extends HtmlParser
         return $value;
     }
 
-    public function parseContent(Data $data, array $params = []): array
+    private function sanitizeDescription(Crawler $nodes): string
     {
-        if (preg_match('/sku: null/', $data->getData()) === 0) {
-            // omit this
-            // no way currently to omit as parseContent must return [key => FeedItem]
+        $description = '';
+
+        foreach ($nodes as $node) {
+            /** @var \DOMElement $node */
+            if ($node->nodeName === 'p') {
+                if (str_ends_with($node->textContent, ':')) {
+                    if ($node->nextElementSibling->nodeName !== 'ul') {
+                        $description .= $node->ownerDocument->saveHTML($node);
+                    }
+                } else {
+                    $description .= $node->ownerDocument->saveHTML($node);
+                }
+            } elseif ($node->nodeName !== 'ul' && $node->nodeName !== 'script') {
+                $description .= $node->ownerDocument->saveHTML($node);
+            }
         }
 
+        return $description;
+    }
+
+    public function parseContent(Data $data, array $params = []): array
+    {
         return parent::parseContent($data, $params);
     }
 
@@ -129,12 +156,13 @@ class Parser extends HtmlParser
 
             $fi->setMpn($json['sku']);
             if (isset($json['image']['data'])) {
-                $fi->setImages([$json['image']['data'], ...$parent_fi->images]);
+                $fi->setImages([str_replace('{:size}', '1280x1280', $json['image']['data']), ...$parent_fi->images]);
             }
             $fi->setCostToUs($json['price']['without_tax']['value']);
             $fi->setRAvail($json['instock'] ? self::DEFAULT_AVAIL_NUMBER : 0);
 
             $fiAttributes = [];
+            $productName = '';
             foreach ($response['link']['params'] as $key => $value) {
                 $node = $this->filter("[name='$key']");
                 if ($node->nodeName() === 'select') {
@@ -149,7 +177,15 @@ class Parser extends HtmlParser
                 $fiAttributes[$attributeKey] = $this->sanitizeAttributeValue($attributeValue);
             }
 
-            $fi->setAttributes(count($fiAttributes) > 0 ? $fiAttributes : null);
+            if (count($fiAttributes) > 0) {
+                foreach ($fiAttributes as $key => $value) {
+                    $productName .= $key . ' ' . $value;
+                }
+            }
+
+            if (mb_strlen($productName) > 0) {
+                $fi->setProduct($productName);
+            }
 
             $children[] = $fi;
         }
@@ -164,13 +200,56 @@ class Parser extends HtmlParser
 
     public function getDescription(): string
     {
-        return $this->getText('.productView-description p');
+        $nodes = $this->filter('.productView-description > div > .productView-description > *');
+
+        if (count($nodes) === 1 && $nodes->getNode(0)->nodeName === 'table') {
+            $nodes = (new Crawler($nodes->getNode(0)))->filter('td > *');
+            return $this->sanitizeDescription($nodes);
+        }
+
+        return $this->sanitizeDescription($nodes);
     }
 
     public function getShortDescription(): array
     {
-        return $this->getContent('.productView-description');
-    }
+        $shortDesc = [];
+
+        // check is this key word 'Specifications'?
+        $this->filter('.productView-description p')->each(function(ParserCrawler $node) use (&$shortDesc) {
+            // if found 'Specifications:'
+            if ($node->text() === 'Specifications:') {
+                $this->filter('.productView-description ul li')->each(function(ParserCrawler $node) use (&$shortDesc) {
+                    // while correspond ':' symbol
+                    if (str_contains($node->text(), ':')) {
+                        if (str_starts_with($node->text(), 'Brand:')) {
+                            // get Brand
+                            $this->brand = explode('Brand:', $node->text())[1];
+                        } else if (str_starts_with($node->text(), 'Weight:')) {
+                            // get Weight
+                            $this->weight = $this->extractWeight($node->text());
+                        } else {
+                            // get options
+                            $option_key_value = explode(':', $node->text());
+                            $this->options[$option_key_value[0]] = $option_key_value[1];
+                        }
+                    } else {
+                        $shortDesc[] = $node->text();
+                    }
+                });
+            }
+       });
+
+        // or gather standard shortDescription (ul li)
+        if (count($shortDesc) < 1){
+            $this
+                ->filter('.productView-description ul li')
+                ->each(static function(ParserCrawler $node) use(&$shortDesc){
+                    $shortDesc[] = $node->text();
+                });
+        }
+
+        return $shortDesc;
+   }
 
     public function getImages(): array
     {
@@ -200,6 +279,10 @@ class Parser extends HtmlParser
     public function getAvail(): ?int
     {
         return self::DEFAULT_AVAIL_NUMBER;
+//        $stock_status = $this->filter('meta[property="og:availability"]')->eq(0)->attr('content');
+//        return $stock_status === 'instock'
+//            ? self::DEFAULT_AVAIL_NUMBER
+//            : 0;
     }
 
     public function getOptions(): array
@@ -236,6 +319,16 @@ class Parser extends HtmlParser
                 }
             });
 
-        return $attributes;
+         return array_merge($attributes, $this->options);
+    }
+
+    public function getBrand(): ?string
+    {
+        return $this->brand;
+    }
+
+    public function getWeight(): ?float
+    {
+        return $this->weight;
     }
 }
