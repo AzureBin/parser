@@ -4,17 +4,36 @@ namespace App\Feeds\Vendors\STG;
 
 use App\Feeds\Feed\FeedItem;
 use App\Feeds\Parser\HtmlParser;
-use App\Feeds\Utils\Data;
 use App\Feeds\Utils\Link;
 use App\Feeds\Utils\ParserCrawler;
 use App\Helpers\StringHelper;
+use DOMElement;
 use Symfony\Component\DomCrawler\Crawler;
 
 class Parser extends HtmlParser
 {
-    private array $options = [];
+    private array $attributes = [];
     private ?float $weight = null;
     private ?string $brand = null;
+
+    private function cartesian(array $input): array
+    {
+        $result = [[]];
+
+        foreach ($input as $key => $values) {
+            $append = [];
+
+            foreach ($result as $product) {
+                foreach ($values as $item) {
+                    $product[$key] = $item;
+                    $append[] = $product;
+                }
+             }
+
+            $result = $append;}
+
+        return $result;
+    }
 
     private function extractWeight(string $str): float
     {
@@ -44,7 +63,7 @@ class Parser extends HtmlParser
         $description = '';
 
         foreach ($nodes as $node) {
-            /** @var \DOMElement $node */
+            /** @var DOMElement $node */
             if ($node->nodeName === 'p') {
                 if (str_ends_with($node->textContent, ':')) {
                     if ($node->nextElementSibling->nodeName !== 'ul') {
@@ -61,20 +80,10 @@ class Parser extends HtmlParser
         return $description;
     }
 
-    public function parseContent(Data $data, array $params = []): array
-    {
-        return parent::parseContent($data, $params);
-    }
-
     public function isGroup(): bool
     {
         $attributes = $this->filter('div[data-product-option-change] .form-select[required], div[data-product-option-change] .form-radio[required]');
-
-        if (count($attributes) > 0 && $this->hasSku()) {
-            return true;
-        } else {
-            return false;
-        }
+        return (count($attributes) > 0 && $this->hasSku());
     }
 
     public function getChildProducts(FeedItem $parent_fi): array
@@ -84,7 +93,7 @@ class Parser extends HtmlParser
         $xsrfToken = $downloader->getCookie('XSRF-TOKEN');
         $productId = $this->filter('input[name="product_id"]')->first()->attr('value');
         $matches = [];
-        preg_match('/"in_stock_attributes":\[(.+)\]/', $this->node->html(), $matches);
+        preg_match('/"in_stock_attributes":\[(.+)]/', $this->node->html(), $matches);
         $inStockAttributes = explode(',', $matches[1]);
         $attributes = [];
         $this
@@ -95,13 +104,13 @@ class Parser extends HtmlParser
                         ->filter('option[data-product-attribute-value]')
                         ->each(static fn(Crawler $node) => $node->attr('value'));
                     foreach ($values as $value) {
-                        if (in_array($value, $inStockAttributes)) {
+                        if (in_array($value, $inStockAttributes, true)) {
                             $attributes[substr($node->attr('name'), 10, -1)][] = $value;
                         }
                     }
                 } else {
                     $value = $node->attr('value');
-                    if (in_array($value, $inStockAttributes)) {
+                    if (in_array($value, $inStockAttributes, true)) {
                         $attributes[substr($node->attr('name'), 10, -1)][] = $value;
                     }
                 }
@@ -113,26 +122,7 @@ class Parser extends HtmlParser
         $downloader->setHeader('x-xsrf-token', $xsrfToken);
         $links = [];
 
-        $cartesian = function (array $input): array {
-            $result = [[]];
-
-            foreach ($input as $key => $values) {
-                $append = [];
-
-                foreach($result as $product) {
-                    foreach($values as $item) {
-                        $product[$key] = $item;
-                        $append[] = $product;
-                    }
-                }
-
-                $result = $append;
-            }
-
-            return $result;
-        };
-
-        foreach ($cartesian($attributes) as $variationParams) {
+        foreach ($this->cartesian($attributes) as $variationParams) {
             $params = [];
             foreach ($variationParams as $key => $value) {
                 $params["attribute[$key]"] = $value;
@@ -179,11 +169,14 @@ class Parser extends HtmlParser
 
             if (count($fiAttributes) > 0) {
                 foreach ($fiAttributes as $key => $value) {
-                    $productName .= $key . ' ' . $value;
+                    if ($productName !== '') {
+                        $productName .= ' ';
+                    }
+                    $productName .= $key . ': ' . $value . '.';
                 }
             }
 
-            if (mb_strlen($productName) > 0) {
+            if ($productName !== '') {
                 $fi->setProduct($productName);
             }
 
@@ -219,7 +212,7 @@ class Parser extends HtmlParser
             // if found 'Specifications:'
             if ($node->text() === 'Specifications:') {
                 $this->filter('.productView-description ul li')->each(function(ParserCrawler $node) use (&$shortDesc) {
-                    // while correspond ':' symbol
+                    // while correspond ':'
                     if (str_contains($node->text(), ':')) {
                         if (str_starts_with($node->text(), 'Brand:')) {
                             // get Brand
@@ -228,9 +221,9 @@ class Parser extends HtmlParser
                             // get Weight
                             $this->weight = $this->extractWeight($node->text());
                         } else {
-                            // get options
-                            $option_key_value = explode(':', $node->text());
-                            $this->options[$option_key_value[0]] = $option_key_value[1];
+                            // get attributes
+                            $attr_key_value = explode(':', $node->text());
+                            $this->attributes[$attr_key_value[0]] = $attr_key_value[1];
                         }
                     } else {
                         $shortDesc[] = $node->text();
@@ -240,10 +233,10 @@ class Parser extends HtmlParser
        });
 
         // or gather standard shortDescription (ul li)
-        if (count($shortDesc) < 1){
+        if (count($shortDesc) < 1) {
             $this
                 ->filter('.productView-description ul li')
-                ->each(static function(ParserCrawler $node) use(&$shortDesc){
+                ->each(static function(ParserCrawler $node) use(&$shortDesc) {
                     $shortDesc[] = $node->text();
                 });
         }
@@ -278,16 +271,16 @@ class Parser extends HtmlParser
 
     public function getAvail(): ?int
     {
-        return self::DEFAULT_AVAIL_NUMBER;
-//        $stock_status = $this->filter('meta[property="og:availability"]')->eq(0)->attr('content');
-//        return $stock_status === 'instock'
-//            ? self::DEFAULT_AVAIL_NUMBER
-//            : 0;
+        $stock_status = $this->filter('meta[property="og:availability"]')->eq(0)->attr('content');
+        return $stock_status === 'instock'
+            ? self::DEFAULT_AVAIL_NUMBER
+            : 0;
     }
 
     public function getOptions(): array
     {
         $attributes = [];
+
         $this
             ->filter('div[data-product-option-change] > div[data-product-attribute="input-checkbox"]')
             ->each(static function(Crawler $node) use (&$attributes) {
@@ -301,25 +294,12 @@ class Parser extends HtmlParser
                 }
             });
 
-        $this
-            ->filter('div[data-product-option-change] .form-select[required], div[data-product-option-change] .form-radio[required]')
-            ->each(function (Crawler $node) use (&$attributes) {
-                if ($node->nodeName() === 'input') {
-                    $key = substr($node->siblings()->first()->text(), 0, -10);
-                    if (!array_key_exists($key, $attributes)) {
-                        $attributes[$key] = [];
-                    }
+         return $attributes;
+    }
 
-                    $attributes[$key][] = $this->sanitizeAttributeValue($node->attr('data-option-label'));
-                } else {
-                    $key = substr($node->siblings()->text(), 0, -10);
-                    $attributes[$key] = $node
-                        ->filter('option[data-product-attribute-value]')
-                        ->each(fn(Crawler $node) => $this->sanitizeAttributeValue($node->text()));
-                }
-            });
-
-         return array_merge($attributes, $this->options);
+    public function getAttributes(): ?array
+    {
+        return (count($this->attributes) > 0) ? $this->attributes : null;
     }
 
     public function getBrand(): ?string
