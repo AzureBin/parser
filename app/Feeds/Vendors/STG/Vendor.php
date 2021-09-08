@@ -13,7 +13,6 @@ class Vendor extends HttpProcessor
     public const PRODUCT_LINK_CSS_SELECTORS = [ '.product > .card > .card-figure > a' ];
     protected array $first = [ 'https://stealthgearusa.com/sitemap/categories/' ];
 
-
     public function getProductsLinks(Data $data, string $url): array
     {
         $links = [];

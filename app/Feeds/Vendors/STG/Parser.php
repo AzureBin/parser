@@ -30,7 +30,8 @@ class Parser extends HtmlParser
                 }
              }
 
-            $result = $append;}
+            $result = $append;
+        }
 
         return $result;
     }
@@ -66,7 +67,7 @@ class Parser extends HtmlParser
             /** @var DOMElement $node */
             if ($node->nodeName === 'p') {
                 if (str_ends_with($node->textContent, ':')) {
-                    if ($node->nextElementSibling->nodeName !== 'ul') {
+                    if ($node->nextElementSibling->nodeName !== 'ul' && $node->textContent !== 'Description:') {
                         $description .= $node->ownerDocument->saveHTML($node);
                     }
                 } else {
@@ -92,29 +93,21 @@ class Parser extends HtmlParser
         $downloader = $this->vendor->getDownloader();
         $xsrfToken = $downloader->getCookie('XSRF-TOKEN');
         $productId = $this->filter('input[name="product_id"]')->first()->attr('value');
-        $matches = [];
-        preg_match('/"in_stock_attributes":\[(.+)]/', $this->node->html(), $matches);
-        $inStockAttributes = explode(',', $matches[1]);
         $attributes = [];
         $this
             ->filter('div[data-product-option-change] .form-select[required], div[data-product-option-change] .form-radio[required]')
-            ->each(static function(Crawler $node) use (&$attributes, $inStockAttributes) {
+            ->each(static function(Crawler $node) use (&$attributes) {
                 if ($node->nodeName() === 'select') {
                     $values = $node
                         ->filter('option[data-product-attribute-value]')
                         ->each(static fn(Crawler $node) => $node->attr('value'));
                     foreach ($values as $value) {
-                        if (in_array($value, $inStockAttributes, true)) {
-                            $attributes[substr($node->attr('name'), 10, -1)][] = $value;
-                        }
+                        $attributes[substr($node->attr('name'), 10, -1)][] = $value;
                     }
                 } else {
                     $value = $node->attr('value');
-                    if (in_array($value, $inStockAttributes, true)) {
-                        $attributes[substr($node->attr('name'), 10, -1)][] = $value;
-                    }
+                    $attributes[substr($node->attr('name'), 10, -1)][] = $value;
                 }
-
             });
 
         $host = substr($this->getUri(), 0, strpos($this->getUri(), '/', 8));
@@ -146,7 +139,7 @@ class Parser extends HtmlParser
 
             $fi->setMpn($json['sku']);
             if (isset($json['image']['data'])) {
-                $fi->setImages([str_replace('{:size}', '1280x1280', $json['image']['data']), ...$parent_fi->images]);
+                $fi->setImages([str_replace('{:size}', '1280x1280', $json['image']['data'])]);
             }
             $fi->setCostToUs($json['price']['without_tax']['value']);
             $fi->setRAvail($json['instock'] ? self::DEFAULT_AVAIL_NUMBER : 0);
@@ -236,8 +229,16 @@ class Parser extends HtmlParser
         if (count($shortDesc) < 1) {
             $this
                 ->filter('.productView-description ul li')
-                ->each(static function(ParserCrawler $node) use(&$shortDesc) {
-                    $shortDesc[] = $node->text();
+                ->each(function(ParserCrawler $node) use(&$shortDesc) {
+                    $text = $node->text();
+                    if (str_contains($text, ':')){
+                        // get attributes
+                        $text = str_replace(['"', '::marker'], '', $text);
+                        $attr_key_value = explode(':', $text);
+                        $this->attributes[$attr_key_value[0]] = $attr_key_value[1];
+                    } else {
+                        $shortDesc[] = $text;
+                    }
                 });
         }
 
@@ -251,7 +252,7 @@ class Parser extends HtmlParser
             ->each(static fn (Crawler $node) => $node->attr('data-image-gallery-zoom-image-url'));
 
         if (count($images) === 0) {
-            return [$this->filter('.productView-image--default')->first()->attr('data-zoom-target')];
+            return [$this->getAttr('.productView-image--default', 'data-zoom-target')];
         }
 
         return $images;
