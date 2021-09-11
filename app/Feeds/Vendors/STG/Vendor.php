@@ -5,6 +5,7 @@ namespace App\Feeds\Vendors\STG;
 use App\Feeds\Feed\FeedItem;
 use App\Feeds\Processor\HttpProcessor;
 use App\Feeds\Utils\Data;
+use App\Feeds\Utils\Link;
 
 class Vendor extends HttpProcessor
 {
@@ -13,14 +14,14 @@ class Vendor extends HttpProcessor
 
     protected array $first = [ 'https://stealthgearusa.com/sitemap/categories/' ];
 
-    public function getProductsLinks(Data $data, string $url): array
+    protected function isValidFeedItem( FeedItem $fi ): bool
     {
-        $links = [];
-        return [...$links, ...parent::getProductsLinks($data, $url)];
-    }
-
-    protected function isValidFeedItem(FeedItem $fi): bool
-    {
-        return $fi->getProductcode() !== $this->getPrefix() . ' ';
+        if ( $fi->isGroup() ) {
+            $fi->setChildProducts( array_values(
+                array_filter( $fi->getChildProducts(), static fn( FeedItem $item ) => !empty( $item->getMpn() ) && count( $item->getImages() ) )
+            ) );
+            return count( $fi->getChildProducts() );
+        }
+        return !empty( $fi->getMpn() ) && count( $fi->getImages() );
     }
 }

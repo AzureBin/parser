@@ -8,6 +8,7 @@ use App\Feeds\Utils\Data;
 use App\Feeds\Utils\Link;
 use App\Feeds\Utils\ParserCrawler;
 use App\Helpers\StringHelper;
+use Exception;
 use Symfony\Component\DomCrawler\Crawler;
 
 class Parser extends HtmlParser
@@ -15,6 +16,8 @@ class Parser extends HtmlParser
     private array $attributes = [];
     private ?float $weight = null;
     private ?string $brand = null;
+    private string $desc = '';
+    private array $short_desc = [];
 
     private function cartesian( array $input ): array
     {
@@ -59,23 +62,109 @@ class Parser extends HtmlParser
         return $value;
     }
 
-    private function sanitizeDescription( Crawler $nodes ): string
+    private function replaceAttributeFromDesc( string $key, string $value ): void
+    {
+        $this->desc = preg_replace( '/<li.*?' . str_replace( '/', '\/', $key . '\s*:.\s*' . $value ) . '<\/li>/i', '', $this->desc );
+    }
+
+    private function parseShortDesc(): array
+    {
+        $short_desc = [];
+
+        // check is this keyword 'Specifications'?
+        $this->filter( '.productView-description p' )->each( function ( ParserCrawler $node ) use ( &$short_desc ) {
+            // if found 'Specifications:'
+            if ( $node->text() === 'Specifications:' ) {
+                $this->filter( '.productView-description ul li' )->each( function ( ParserCrawler $node ) use ( &$short_desc ) {
+                    // while correspond ':'
+                    if ( str_contains( $node->text(), ':' ) ) {
+                        if ( str_starts_with( $node->text(), 'Brand:' ) ) {
+                            // get Brand
+                            $this->brand = explode( 'Brand:', $node->text() )[ 1 ];
+                        }
+                        else if ( str_starts_with( $node->text(), 'Weight:' ) ) {
+                            // get Weight
+                            $this->weight = $this->extractWeight( $node->text() );
+                        }
+                        else {
+                            // get attributes
+                            $attr_key_value = array_map( static fn( $el ) => StringHelper::normalizeSpaceInString( $el ), explode( ':', $node->text() ) );
+                            if ( StringHelper::isNotEmpty( $attr_key_value[ 1 ] ) ) {
+                                $this->replaceAttributeFromDesc( $attr_key_value[ 0 ], $attr_key_value[ 1 ] );
+                                $this->attributes[ $attr_key_value[ 0 ] ] = $attr_key_value[ 1 ];
+                            }
+                            else {
+                                $short_desc[] = $attr_key_value[ 0 ] . ':';
+                            }
+
+                        }
+                    }
+                    else {
+                        $short_desc[] = $node->text();
+                    }
+                } );
+            }
+        } );
+
+        // or gather standard shortDescription (ul li)
+        if ( count( $short_desc ) < 1 ) {
+            $this
+                ->filter( '.productView-description ul li' )
+                ->each( function ( ParserCrawler $node ) use ( &$short_desc ) {
+                    $text = $node->text();
+                    if ( str_contains( $text, ':' ) ) {
+                        // get attributes
+                        $text = str_replace( [ '"', '::marker' ], '', $text );
+                        $attr_key_value = array_map( static fn( $el ) => StringHelper::normalizeSpaceInString( $el ), explode( ':', $text ) );
+
+                        if ( StringHelper::isNotEmpty( $attr_key_value[ 1 ] ) ) {
+                            $this->replaceAttributeFromDesc( $attr_key_value[ 0 ], $attr_key_value[ 1 ] );
+                            $this->attributes[ $attr_key_value[ 0 ] ] = $attr_key_value[ 1 ];
+                        }
+                        else {
+                            $short_desc[] = $attr_key_value[ 0 ] . ':';
+                        }
+                    }
+                    else {
+                        $short_desc[] = $text;
+                    }
+                } );
+        }
+
+        if ( stripos( $this->getHtml( '.productView-description' ), 'includes:' ) !== false
+            || stripos( $this->getHtml( '.productView-description' ), 'Accessories:' ) !== false ) {
+            return [];
+        }
+
+        return $short_desc;
+    }
+
+    private function sanitizeDescription( ParserCrawler $nodes ): string
     {
         $description = '';
+        $contains_includes = stripos( $this->getHtml( '.productView-description' ), 'includes:' ) !== false
+            || stripos( $this->getHtml( '.productView-description' ), 'Accessories:' ) !== false;
 
         foreach ( $nodes as $node ) {
-            if ( $node->nodeName === 'p' ) {
-                if ( str_ends_with( $node->textContent, ':' ) ) {
-                    if ( $node->nextElementSibling->nodeName !== 'ul' && $node->textContent !== 'Description:' ) {
+            if ( $node->nodeName !== 'script' ) {
+                if ( $node->nodeName === 'p' ) {
+                    try {
+                        $valid_bool = ( $contains_includes || $node->nextElementSibling->nodeName !== 'ul' );
+                    } catch ( Exception ) {
+                        $valid_bool = true;
+                    }
+                    if ( $valid_bool && str_ends_with( $node->textContent, ':' ) ) {
+                        if ( $node->textContent !== 'Description:' ) {
+                            $description .= $node->ownerDocument->saveHTML( $node );
+                        }
+                    }
+                    else if ( $valid_bool || $node->textContent !== 'Details:' ) {
                         $description .= $node->ownerDocument->saveHTML( $node );
                     }
                 }
-                else {
+                else if ( ( $contains_includes || $node->nodeName !== 'ul' ) ) {
                     $description .= $node->ownerDocument->saveHTML( $node );
                 }
-            }
-            elseif ( $node->nodeName !== 'ul' && $node->nodeName !== 'script' ) {
-                $description .= $node->ownerDocument->saveHTML( $node );
             }
         }
 
@@ -95,10 +184,21 @@ class Parser extends HtmlParser
         return parent::parseContent( $data, $params );
     }
 
+    public function beforeParse(): void
+    {
+        $nodes = $this->filter( '.productView-description > div > .productView-description > *' );
+
+        if ( count( $nodes ) === 1 && $nodes->getNode( 0 )->nodeName === 'table' ) {
+            $nodes = ( new ParserCrawler( $nodes->getNode( 0 ) ) )->filter( 'td > *' );
+        }
+
+        $this->desc = $this->sanitizeDescription( $nodes );
+        $this->short_desc = $this->parseShortDesc();
+    }
+
     public function isGroup(): bool
     {
-        $attributes = $this->filter( 'div[data-product-option-change] .form-select[required], div[data-product-option-change] .form-radio[required]' );
-        return ( count( $attributes ) > 0 && $this->hasSku() );
+        return $this->exists( '[name*="attribute"]' );
     }
 
     public function getChildProducts( FeedItem $parent_fi ): array
@@ -177,7 +277,7 @@ class Parser extends HtmlParser
                 $fi_attributes[ $attribute_key ] = $this->sanitizeAttributeValue( $attribute_value );
             }
 
-            $fi->setMpn( $mpn );
+            $fi->setMpn( StringHelper::normalizeSpaceInString( $mpn ) );
 
             if ( count( $fi_attributes ) > 0 ) {
                 foreach ( $fi_attributes as $key => $value ) {
@@ -200,93 +300,20 @@ class Parser extends HtmlParser
 
     public function getProduct(): string
     {
+        $url = $this->filter('.productView-reviewLink a')->attr('href');
+        $x = 100;
+
         return $this->getText( '.productView-title' );
     }
 
     public function getDescription(): string
     {
-        $nodes = $this->filter( '.productView-description > div > .productView-description > *' );
-
-        if ( count( $nodes ) === 1 && $nodes->getNode( 0 )->nodeName === 'table' ) {
-            $nodes = ( new Crawler( $nodes->getNode( 0 ) ) )->filter( 'td > *' );
-            return $this->sanitizeDescription( $nodes );
-        }
-
-        return $this->sanitizeDescription( $nodes );
+        return $this->desc;
     }
 
     public function getShortDescription(): array
     {
-        $short_desc = [];
-
-        // never collect short description if it contains "includes:"
-        try {
-            $exception_text = $this->filter( '.productView-description p span' )->text();
-            if ( str_contains( $exception_text, 'includes:' ) ){
-               return [];
-            }
-        }
-        catch (\Exception $ex){}
-
-        // check is this keyword 'Specifications'?
-        $this->filter( '.productView-description p' )->each( function ( ParserCrawler $node ) use ( &$short_desc ) {
-            // if found 'Specifications:'
-            if ( $node->text() === 'Specifications:' ) {
-                $this->filter( '.productView-description ul li' )->each( function ( ParserCrawler $node ) use ( &$short_desc ) {
-                    // while correspond ':'
-                    if ( str_contains( $node->text(), ':' ) ) {
-                        if ( str_starts_with( $node->text(), 'Brand:' ) ) {
-                            // get Brand
-                            $this->brand = explode( 'Brand:', $node->text() )[ 1 ];
-                        }
-                        else if ( str_starts_with( $node->text(), 'Weight:' ) ) {
-                            // get Weight
-                            $this->weight = $this->extractWeight( $node->text() );
-                        }
-                        else {
-                            // get attributes
-                            $attr_key_value = array_map( static fn( $el ) => StringHelper::normalizeSpaceInString( $el ), explode( ':', $node->text() ) );
-                            if ( StringHelper::isNotEmpty( $attr_key_value[ 1 ] ) ) {
-                                $this->attributes[ $attr_key_value[ 0 ] ] = $attr_key_value[ 1 ];
-                            }
-                            else {
-                                $short_desc[] = $attr_key_value[ 0 ] . ':';
-                            }
-
-                        }
-                    }
-                    else {
-                        $short_desc[] = $node->text();
-                    }
-                } );
-            }
-        } );
-
-        // or gather standard shortDescription (ul li)
-        if ( count( $short_desc ) < 1 ) {
-            $this
-                ->filter( '.productView-description ul li' )
-                ->each( function ( ParserCrawler $node ) use ( &$short_desc ) {
-                    $text = $node->text();
-                    if ( str_contains( $text, ':' ) ) {
-                        // get attributes
-                        $text = str_replace( [ '"', '::marker' ], '', $text );
-                        $attr_key_value = array_map( static fn( $el ) => StringHelper::normalizeSpaceInString( $el ), explode( ':', $text ) );
-
-                        if ( StringHelper::isNotEmpty( $attr_key_value[ 1 ] ) ) {
-                            $this->attributes[ $attr_key_value[ 0 ] ] = $attr_key_value[ 1 ];
-                        }
-                        else {
-                            $short_desc[] = $attr_key_value[ 0 ] . ':';
-                        }
-                    }
-                    else {
-                        $short_desc[] = $text;
-                    }
-                } );
-        }
-
-        return $short_desc;
+        return $this->short_desc;
     }
 
     public function getImages(): array
@@ -304,9 +331,7 @@ class Parser extends HtmlParser
 
     public function getMpn(): string
     {
-        return $this->hasSku()
-            ? $this->filter( '.trustpilot-widget' )->first()->attr( 'data-sku' )
-            : ' ';
+        return $this->hasSku() ? $this->filter( '.trustpilot-widget' )->first()->attr( 'data-sku' ) : '';
     }
 
     public function getCostToUs(): float
@@ -335,5 +360,13 @@ class Parser extends HtmlParser
     public function getWeight(): ?float
     {
         return $this->weight;
+    }
+
+    public function getVideos(): array
+    {
+        $videos[] = $this->getAttrs( '.productView-description iframe', 'src' );
+        return array_map( static function ( $value ) {
+            return str_replace( 'embed/', 'watch?v=', $value );
+        }, $videos );
     }
 }
