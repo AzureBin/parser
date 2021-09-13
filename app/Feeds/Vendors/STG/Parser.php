@@ -300,9 +300,6 @@ class Parser extends HtmlParser
 
     public function getProduct(): string
     {
-        $url = $this->filter('.productView-reviewLink a')->attr('href');
-        $x = 100;
-
         return $this->getText( '.productView-title' );
     }
 
@@ -364,9 +361,32 @@ class Parser extends HtmlParser
 
     public function getVideos(): array
     {
-        $videos[] = $this->getAttrs( '.productView-description iframe', 'src' );
-        return array_map( static function ( $value ) {
-            return str_replace( 'embed/', 'watch?v=', $value );
-        }, $videos );
+        $videos = [];
+
+        // get URLs
+        $urls = $this->getAttrs( '.productView-description iframe', 'src' );
+
+        if ( isset ( $urls[0] ) ) {
+            foreach ( $urls as $url ) {
+
+                // get host name from URL
+                $host = parse_url( $url )[ 'host' ];
+
+                // cut provider name between dots
+                preg_match('/\.(.+)\./', $host, $split);
+                if ( !isset ( $split[1] ) ){
+                    preg_match('/(.+)\./', $host, $split);
+                }
+
+                // add each data of video to array
+                $videos[] = [
+                    'name' => $this->getProduct(),
+                    'provider' => $split[1],
+                    'video' => $url,
+                ];
+            }
+        }
+
+        return $videos;
     }
 }
