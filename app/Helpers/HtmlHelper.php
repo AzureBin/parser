@@ -2,6 +2,8 @@
 
 namespace App\Helpers;
 
+use App\Feeds\Utils\ParserCrawler;
+
 class HtmlHelper
 {
     private static array $allowed_tags = [
@@ -94,16 +96,22 @@ class HtmlHelper
      */
     public static function cutEmptyTags( string $string ): string
     {
-        if ( preg_match_all( '/<(?<tag>\w+)>/', $string, $m ) ) {
-            $ts = array_unique( $m[ 'tag' ] );
-            foreach ( $ts as $t ) {
-                if ( !in_array( $t, self::$single_tags, true ) && preg_match_all( "/<$t>(?<content>.*?)<\/$t>/s", $string, $c ) ) {
-                    foreach ( $c[ 'content' ] as $e ) {
-                        if ( !StringHelper::isNotEmpty( $e ) ) {
-                            $string = (string)str_replace( $e, ' ', $string );
-                            $string = preg_replace( "/<$t>(\s+)?<\/$t>/s", '', $string );
-                        }
+        $crawler = new ParserCrawler( $string );
+        $children = $crawler->filter( 'body' )->count() ? $crawler->filter( 'body' )->children() : [];
+        foreach ( $children as $child ) {
+            /** Если текущий узел содержит дочерние узлы, обрабатываем их по отдельности **/
+            if ( $child->childElementCount ) {
+                foreach ( $child->childNodes as $node ) {
+                    if ( !in_array( $node->nodeName, self::$single_tags, true ) ) {
+                        $content = $node->ownerDocument->saveHTML( $node );
+                        $string = str_replace( $content, self::cutEmptyTags( $content ), $string );
                     }
+                }
+            }
+            else if ( !in_array( $child->nodeName, self::$single_tags, true ) ) {
+                $content = $child->ownerDocument->saveHTML( $child );
+                if ( !StringHelper::isNotEmpty( $content ) ) {
+                    $string = str_replace( $content, '', $string );
                 }
             }
         }
