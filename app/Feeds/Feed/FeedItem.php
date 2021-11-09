@@ -188,6 +188,8 @@ class FeedItem
                                     $child->setSupplierInternalId( $parser->getInternalId() );
                                 }
                                 $child->setHashProduct( $parser->getVendor()->getForce() );
+
+                                $child->parser = null;
                             }
 
                             return $c;
